@@ -1,0 +1,29 @@
+# ── RBAC: allow the backend to manage game server Deployments & Services ───────
+# Scope is limited to the "gameservers" namespace so the backend cannot
+# interfere with the "gameserver" (web tier) namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: minecraft-manager
+  namespace: gameservers
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gameserver-backend-binding
+  namespace: gameservers
+subjects:
+  - kind: ServiceAccount
+    name: gameserver-backend
+    namespace: gameserver
+roleRef:
+  kind: Role
+  name: minecraft-manager
+  apiGroup: rbac.authorization.k8s.io

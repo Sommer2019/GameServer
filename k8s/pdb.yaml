@@ -1,0 +1,24 @@
+# ── PodDisruptionBudgets ───────────────────────────────────────────────────────
+# Guarantee at least 1 replica stays running during voluntary disruptions
+# (node drain, rolling upgrades, etc.) so there is always zero downtime.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: gameserver
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: gameserver
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend

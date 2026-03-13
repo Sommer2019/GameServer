@@ -1,0 +1,13 @@
+# ── PostgreSQL Service (ClusterIP – only reachable inside the cluster) ─────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: gameserver
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None   # Headless – StatefulSet pods get stable DNS names

@@ -1,0 +1,7 @@
+# ── Namespace: web tier (frontend, backend, postgres) ─────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gameserver
+  labels:
+    app.kubernetes.io/managed-by: gameserver

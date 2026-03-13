@@ -1,0 +1,42 @@
+# ── Ingress ────────────────────────────────────────────────────────────────────
+# Requires an Ingress controller (e.g. ingress-nginx) installed in the cluster.
+# Replace 'gameserver.example.com' with your actual domain.
+# TLS is managed by cert-manager (annotate with cert-manager.io/cluster-issuer).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gameserver-ingress
+  namespace: gameserver
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # Rate limiting on auth routes (5 req/min per IP)
+    nginx.ingress.kubernetes.io/limit-rps: "5"
+    # Redirect HTTP → HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # TLS certificate (requires cert-manager)
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts:
+  #       - gameserver.example.com
+  #     secretName: gameserver-tls
+  rules:
+    - host: gameserver.example.com
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

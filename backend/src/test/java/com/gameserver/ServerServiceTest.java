@@ -6,7 +6,7 @@ import com.gameserver.model.ServerStatus;
 import com.gameserver.model.User;
 import com.gameserver.repository.MinecraftServerRepository;
 import com.gameserver.repository.UserRepository;
-import com.gameserver.service.DockerService;
+import com.gameserver.service.ContainerOrchestrationService;
 import com.gameserver.service.ServerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ class ServerServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
-    private DockerService dockerService;
+    private ContainerOrchestrationService orchestrationService;
 
     private ServerService serverService;
 
@@ -37,7 +37,7 @@ class ServerServiceTest {
 
     @BeforeEach
     void setUp() {
-        serverService = new ServerService(serverRepository, userRepository, dockerService);
+        serverService = new ServerService(serverRepository, userRepository, orchestrationService, 25565, 25574);
         testUser.setId(1L);
     }
 
@@ -48,7 +48,7 @@ class ServerServiceTest {
         when(serverRepository.existsByUser(testUser)).thenReturn(false);
         when(serverRepository.count()).thenReturn(0L);
         when(serverRepository.findAllPorts()).thenReturn(List.of());
-        when(dockerService.createMinecraftContainer(eq("MyServer"), eq(25565))).thenReturn("container123");
+        when(orchestrationService.createMinecraftContainer(eq("MyServer"), eq(25565))).thenReturn("container123");
         when(serverRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ServerCreateRequest req = new ServerCreateRequest();
@@ -61,8 +61,9 @@ class ServerServiceTest {
         assertThat(response.getName()).isEqualTo("MyServer");
         assertThat(response.getPort()).isEqualTo(25565);
         assertThat(response.getStatus()).isEqualTo(ServerStatus.RUNNING);
-        verify(dockerService).createMinecraftContainer("MyServer", 25565);
-        verify(dockerService).startContainer("container123");
+        verify(orchestrationService).createMinecraftContainer("MyServer", 25565);
+        // startContainer is not called separately; the orchestration backend starts on creation
+        verifyNoMoreInteractions(orchestrationService);
     }
 
     @Test
@@ -116,7 +117,7 @@ class ServerServiceTest {
         when(serverRepository.existsByUser(testUser)).thenReturn(false);
         when(serverRepository.count()).thenReturn(3L);
         when(serverRepository.findAllPorts()).thenReturn(List.of(25565, 25566, 25567));
-        when(dockerService.createMinecraftContainer(any(), eq(25568))).thenReturn("ctr");
+        when(orchestrationService.createMinecraftContainer(any(), eq(25568))).thenReturn("ctr");
         when(serverRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ServerCreateRequest req = new ServerCreateRequest();
@@ -137,7 +138,7 @@ class ServerServiceTest {
 
         serverService.deleteServer("alice");
 
-        verify(dockerService).removeContainer("ctr42");
+        verify(orchestrationService).removeContainer("ctr42");
         verify(serverRepository).delete(server);
     }
 
@@ -154,6 +155,6 @@ class ServerServiceTest {
         var response = serverService.stopServer("alice");
 
         assertThat(response.getStatus()).isEqualTo(ServerStatus.STOPPED);
-        verify(dockerService).stopContainer("ctr99");
+        verify(orchestrationService).stopContainer("ctr99");
     }
 }

@@ -6,12 +6,14 @@ import com.github.dockerjava.core.DockerClientImpl;
 import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
 import com.github.dockerjava.api.DockerClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 
 @Configuration
+@ConditionalOnProperty(name = "app.orchestration", havingValue = "docker", matchIfMissing = true)
 public class DockerConfig {
 
     @Value("${docker.host:unix:///var/run/docker.sock}")

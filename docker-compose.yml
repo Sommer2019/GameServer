@@ -30,26 +30,51 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
+      # Use Docker orchestration in local dev (game servers = containers on this host)
+      APP_ORCHESTRATION: docker
+      PORT_RANGE_START: 25565
+      PORT_RANGE_END: 25574
+      # Docker socket so the backend can create Minecraft containers on the same host
+      DOCKER_HOST: unix:///var/run/docker.sock
+      # PostgreSQL connection (matches the postgres service below)
+      DB_URL: jdbc:postgresql://postgres:5432/gameserver
+      DB_USER: gameserver
+      DB_PASSWORD: ${DB_PASSWORD:-gameserver_dev}
       # Override this with a strong random secret in production!
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars-long}
-      # Expose the Docker socket so the backend can create Minecraft containers
-      # on the same Docker host (no extra VM required)
-      DOCKER_HOST: unix:///var/run/docker.sock
     volumes:
-      # Mount the Docker socket – containers are created on the host directly
+      # Mount Docker socket for Minecraft container management
       - /var/run/docker.sock:/var/run/docker.sock
-      # Persistent H2 database
-      - gameserver-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - web
-    # Backend never exposed directly; only reachable via nginx
     expose:
       - "8080"
 
+  # ── PostgreSQL database ───────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gameserver
+      POSTGRES_USER: gameserver
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gameserver_dev}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameserver"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - web
+
 # ── Volumes ───────────────────────────────────────────────────────────────────
 volumes:
-  gameserver-data:
+  postgres-data:
 
 # ── Networks ──────────────────────────────────────────────────────────────────
 networks:

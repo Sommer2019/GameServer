@@ -6,12 +6,14 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
-public class DockerService {
+@ConditionalOnProperty(name = "app.orchestration", havingValue = "docker", matchIfMissing = true)
+public class DockerService implements ContainerOrchestrationService {
 
     private static final Logger log = LoggerFactory.getLogger(DockerService.class);
     private static final String MINECRAFT_IMAGE = "itzg/minecraft-server:latest";
@@ -28,6 +30,7 @@ public class DockerService {
     /**
      * Pulls the Minecraft image if not present, creates a container and returns its ID.
      */
+    @Override
     public String createMinecraftContainer(String serverName, int hostPort) {
         pullImageIfAbsent(MINECRAFT_IMAGE);
 
@@ -60,16 +63,19 @@ public class DockerService {
         return container.getId();
     }
 
+    @Override
     public void startContainer(String containerId) {
         dockerClient.startContainerCmd(containerId).exec();
         log.info("Started container {}", containerId);
     }
 
+    @Override
     public void stopContainer(String containerId) {
         dockerClient.stopContainerCmd(containerId).withTimeout(30).exec();
         log.info("Stopped container {}", containerId);
     }
 
+    @Override
     public void removeContainer(String containerId) {
         dockerClient.removeContainerCmd(containerId).withForce(true).exec();
         log.info("Removed container {}", containerId);
@@ -78,6 +84,7 @@ public class DockerService {
     /**
      * Returns the Docker container state string (e.g. "running", "exited").
      */
+    @Override
     public String getContainerState(String containerId) {
         try {
             InspectContainerResponse inspect = dockerClient.inspectContainerCmd(containerId).exec();

@@ -7,6 +7,7 @@ import com.gameserver.model.ServerStatus;
 import com.gameserver.model.User;
 import com.gameserver.repository.MinecraftServerRepository;
 import com.gameserver.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,19 +19,24 @@ import java.util.stream.IntStream;
 public class ServerService {
 
     static final int MAX_TOTAL_SERVERS = 10;
-    static final int PORT_RANGE_START = 25565;
-    static final int PORT_RANGE_END = 25574; // inclusive, 10 ports total
+
+    private final int portRangeStart;
+    private final int portRangeEnd;
 
     private final MinecraftServerRepository serverRepository;
     private final UserRepository userRepository;
-    private final DockerService dockerService;
+    private final ContainerOrchestrationService orchestrationService;
 
     public ServerService(MinecraftServerRepository serverRepository,
                          UserRepository userRepository,
-                         DockerService dockerService) {
-        this.serverRepository = serverRepository;
-        this.userRepository = userRepository;
-        this.dockerService = dockerService;
+                         ContainerOrchestrationService orchestrationService,
+                         @Value("${app.server.port-range-start:25565}") int portRangeStart,
+                         @Value("${app.server.port-range-end:25574}")   int portRangeEnd) {
+        this.serverRepository    = serverRepository;
+        this.userRepository      = userRepository;
+        this.orchestrationService = orchestrationService;
+        this.portRangeStart      = portRangeStart;
+        this.portRangeEnd        = portRangeEnd;
     }
 
     @Transactional
@@ -49,9 +55,8 @@ public class ServerService {
         serverRepository.save(server);
 
         try {
-            String containerId = dockerService.createMinecraftContainer(req.getName(), port);
-            server.setContainerId(containerId);
-            dockerService.startContainer(containerId);
+            String id = orchestrationService.createMinecraftContainer(req.getName(), port);
+            server.setContainerId(id);
             server.setStatus(ServerStatus.RUNNING);
         } catch (Exception e) {
             server.setStatus(ServerStatus.ERROR);
@@ -76,7 +81,7 @@ public class ServerService {
         if (server.getContainerId() == null) {
             throw new IllegalStateException("Server has no associated container.");
         }
-        dockerService.startContainer(server.getContainerId());
+        orchestrationService.startContainer(server.getContainerId());
         server.setStatus(ServerStatus.RUNNING);
         serverRepository.save(server);
         return toResponse(server);
@@ -88,7 +93,7 @@ public class ServerService {
         if (server.getContainerId() == null) {
             throw new IllegalStateException("Server has no associated container.");
         }
-        dockerService.stopContainer(server.getContainerId());
+        orchestrationService.stopContainer(server.getContainerId());
         server.setStatus(ServerStatus.STOPPED);
         serverRepository.save(server);
         return toResponse(server);
@@ -98,7 +103,7 @@ public class ServerService {
     public void deleteServer(String username) {
         MinecraftServer server = getServerEntity(username);
         if (server.getContainerId() != null) {
-            dockerService.removeContainer(server.getContainerId());
+            orchestrationService.removeContainer(server.getContainerId());
         }
         serverRepository.delete(server);
     }
@@ -116,7 +121,7 @@ public class ServerService {
 
     private int allocatePort() {
         List<Integer> usedPorts = serverRepository.findAllPorts();
-        return IntStream.rangeClosed(PORT_RANGE_START, PORT_RANGE_END)
+        return IntStream.rangeClosed(portRangeStart, portRangeEnd)
                 .filter(p -> !usedPorts.contains(p))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No available ports for a new server."));
@@ -124,12 +129,12 @@ public class ServerService {
 
     private void syncStatus(MinecraftServer server) {
         if (server.getContainerId() != null) {
-            String state = dockerService.getContainerState(server.getContainerId());
+            String state = orchestrationService.getContainerState(server.getContainerId());
             ServerStatus status = switch (state) {
-                case "running" -> ServerStatus.RUNNING;
-                case "exited", "dead" -> ServerStatus.STOPPED;
+                case "running"                    -> ServerStatus.RUNNING;
+                case "exited", "dead"             -> ServerStatus.STOPPED;
                 case "created", "paused", "restarting" -> ServerStatus.CREATING;
-                default -> ServerStatus.ERROR;
+                default                           -> ServerStatus.ERROR;
             };
             if (status != server.getStatus()) {
                 server.setStatus(status);
@@ -148,3 +153,4 @@ public class ServerService {
         );
     }
 }
+

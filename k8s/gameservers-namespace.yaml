@@ -1,0 +1,8 @@
+# ── Namespace: game server pods (Minecraft containers) ────────────────────────
+# Isolated from the web tier; backend gets RBAC access via RoleBinding.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gameservers
+  labels:
+    app.kubernetes.io/managed-by: gameserver-backend
