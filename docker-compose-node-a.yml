@@ -21,6 +21,45 @@ version: "3.9"
 
 services:
 
+  # ── 0. Lobby Server (always running – adventure mode fallback hub) ────────
+  minecraft-lobby:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-lobby
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "1.21.4"
+      MEMORY: "512M"
+      # Offline mode – auth is handled by Velocity
+      ONLINE_MODE: "FALSE"
+      ENFORCE_SECURE_PROFILE: "FALSE"
+      # Velocity modern forwarding secret – must match velocity-node-a.toml
+      PAPER_VELOCITY_SECRET: "${VELOCITY_SECRET}"
+      # Lobby is always in adventure mode – players cannot modify the world
+      GAMEMODE: "adventure"
+      FORCE_GAMEMODE: "TRUE"
+      JVM_XX_OPTS: "-XX:+UseG1GC"
+    volumes:
+      # Lobby world persists locally – it is a lightweight, stateless map
+      - lobby-config:/data
+    ports:
+      # Bind only to loopback so only the co-located proxy can reach the lobby.
+      # Velocity connects here as "lobby = 127.0.0.1:25566" / "[::1]:25566".
+      - "127.0.0.1:25566:25565"
+      - "[::1]:25566:25565"
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      role: "lobby"
+      node: "node-a"
+
   # ── 1. Minecraft Backend (primary / active) ──────────────────────────────
   minecraft-primary:
     image: itzg/minecraft-server:latest
@@ -70,6 +109,7 @@ services:
     restart: unless-stopped
     depends_on:
       - minecraft-primary
+      - minecraft-lobby
     ports:
       # Public-facing port – Keepalived Proxy VIP (IPv4 + IPv6) points here.
       # Binding to [::] on Linux accepts both IPv4 (via ::ffff:) and IPv6.
@@ -92,6 +132,8 @@ services:
       node: "node-a"
 
 volumes:
+  lobby-config:
+    driver: local
   minecraft-config:
     driver: local
   velocity-data-1:

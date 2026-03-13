@@ -133,8 +133,10 @@ NODE_B="${REPO_ROOT}/docker-compose-node-b.yml"
 
 assert_contains "Node A has minecraft-primary service"  "${NODE_A}" "minecraft-primary"
 assert_contains "Node A has velocity-proxy-1 service"   "${NODE_A}" "velocity-proxy-1"
+assert_contains "Node A has minecraft-lobby service"    "${NODE_A}" "minecraft-lobby"
 assert_contains "Node B has minecraft-backup service"   "${NODE_B}" "minecraft-backup"
 assert_contains "Node B has velocity-proxy-2 service"   "${NODE_B}" "velocity-proxy-2"
+assert_contains "Node B has minecraft-lobby service"    "${NODE_B}" "minecraft-lobby"
 
 # Minecraft backend: loopback only (IPv4 + IPv6)
 assert_contains "Node A MC binds to 127.0.0.1"  "${NODE_A}" "127.0.0.1:25565"
@@ -171,6 +173,30 @@ assert_contains "Node B mounts NFS worlds" "${NODE_B}" "/mnt/gamedata/worlds"
 # Per-node velocity configs are mounted
 assert_contains "Node A mounts velocity-node-a.toml" "${NODE_A}" "velocity-node-a.toml"
 assert_contains "Node B mounts velocity-node-b.toml" "${NODE_B}" "velocity-node-b.toml"
+
+# ── 3b. Lobby service: ports, adventure mode, resource limits ────────────────
+echo ""
+echo "-- 3b. Lobby service (adventure mode) --"
+
+# Lobby binds to loopback on port 25566 (IPv4 + IPv6)
+assert_contains "Node A lobby binds to 127.0.0.1:25566" "${NODE_A}" "127.0.0.1:25566"
+assert_contains "Node A lobby binds to [::1]:25566"    "${NODE_A}" '::1\]:25566:25565'
+assert_contains "Node B lobby binds to 127.0.0.1:25566" "${NODE_B}" "127.0.0.1:25566"
+assert_contains "Node B lobby binds to [::1]:25566"    "${NODE_B}" '::1\]:25566:25565'
+
+# Adventure mode enforced in both lobby services
+assert_contains "Node A lobby GAMEMODE=adventure"    "${NODE_A}" 'GAMEMODE: "adventure"'
+assert_contains "Node A lobby FORCE_GAMEMODE=TRUE"   "${NODE_A}" 'FORCE_GAMEMODE: "TRUE"'
+assert_contains "Node B lobby GAMEMODE=adventure"    "${NODE_B}" 'GAMEMODE: "adventure"'
+assert_contains "Node B lobby FORCE_GAMEMODE=TRUE"   "${NODE_B}" 'FORCE_GAMEMODE: "TRUE"'
+
+# Lobby uses reduced memory (512M)
+assert_contains "Node A lobby uses 512M memory"  "${NODE_A}" "512M"
+assert_contains "Node B lobby uses 512M memory"  "${NODE_B}" "512M"
+
+# Lobby has its own dedicated volume (not sharing game-server NFS data)
+assert_contains "Node A lobby has lobby-config volume"  "${NODE_A}" "lobby-config"
+assert_contains "Node B lobby has lobby-config volume"  "${NODE_B}" "lobby-config"
 
 # ── 4. Keepalived: VRRP roles, priorities, and dual-stack VIPs ───────────────
 echo ""
@@ -238,8 +264,12 @@ for VT in "${VNA}" "${VNB}"; do
     assert_contains "${label} has [servers]"          "${VT}" '\[servers\]'
     assert_contains "${label} has main server"        "${VT}" 'main'
     assert_contains "${label} has backup server"      "${VT}" 'backup'
+    assert_contains "${label} has lobby server"       "${VT}" '^lobby '
+    assert_contains "${label} has lobby6 server"      "${VT}" '^lobby6 '
     assert_contains "${label} has try list"           "${VT}" 'try'
+    assert_contains "${label} lobby in try list"      "${VT}" '"lobby"'
     assert_contains "${label} has [forced-hosts]"     "${VT}" '\[forced-hosts\]'
+    assert_contains "${label} forced-hosts → lobby"   "${VT}" '"lobby"'
     assert_contains "${label} uses MODERN fwd"        "${VT}" 'MODERN'
     assert_contains "${label} has forwarding_secret"  "${VT}" 'forwarding_secret'
     # Dual-stack bind: [::] accepts both IPv4 and IPv6
@@ -247,6 +277,9 @@ for VT in "${VNA}" "${VNB}"; do
     # Co-located backend: both IPv4 and IPv6 loopback
     assert_contains "${label} has IPv4 loopback main" "${VT}" '127.0.0.1:25565'
     assert_contains "${label} has IPv6 loopback main" "${VT}" '\[::1\]:25565'
+    # Lobby on loopback port 25566 (IPv4 + IPv6)
+    assert_contains "${label} lobby IPv4 loopback"    "${VT}" '127.0.0.1:25566'
+    assert_contains "${label} lobby IPv6 loopback"    "${VT}" '\[::1\]:25566'
 done
 
 # Node A should fall back to Node B
