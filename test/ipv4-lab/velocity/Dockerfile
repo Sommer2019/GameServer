@@ -23,7 +23,7 @@ VOLUME ["/opt/velocity"]
 EXPOSE 25577
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD nc -z localhost 25577 || exit 1
+    CMD nc -z 127.0.0.1 25577 || exit 1
 
 ENTRYPOINT ["java", \
     "-Xms512M", "-Xmx1G", \
