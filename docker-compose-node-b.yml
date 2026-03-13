@@ -7,11 +7,11 @@ version: "3.9"
 #   1. minecraft-backup  – the standby Minecraft backend (watchdog-controlled)
 #   2. velocity-proxy-2  – standby Velocity proxy (always running)
 #
-# Keepalived on this host takes the public Proxy VIP only when Node A fails.
-# The Velocity proxy on Node B is always running but receives traffic ONLY
-# when the VIP has failed over here.
+# Keepalived on this host takes the public Proxy VIP (IPv4 + IPv6) only when
+# Node A fails. Velocity Proxy 2 receives player traffic only after failover.
 #
 # Prerequisites:
+#   - Docker daemon has IPv6 enabled (run scripts/setup-docker-ipv6.sh first)
 #   - Shared NFS volume is already mounted at /mnt/gamedata on this host
 #   - Keepalived is running (see keepalived/node-b/keepalived.conf)
 #
@@ -45,8 +45,9 @@ services:
       - ./scripts/watchdog.sh:/usr/local/bin/watchdog.sh:ro
       - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
     ports:
-      # Bind only to localhost so only the co-located proxy can reach it
+      # Bind only to loopback (IPv4 + IPv6) so only the co-located proxy reaches it
       - "127.0.0.1:25565:25565"
+      - "[::1]:25565:25565"
     # Override default entrypoint to run the watchdog-controlled startup
     entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-backup.sh"]
     networks:
@@ -72,10 +73,12 @@ services:
     container_name: velocity-proxy-2
     restart: unless-stopped
     ports:
-      # Same public port – Keepalived Proxy VIP will route here after failover
-      - "25565:25577"
+      # Same public port – Keepalived Proxy VIP (IPv4 + IPv6) routes here after failover.
+      - "0.0.0.0:25565:25577"
+      - "[::]:25565:25577"
     volumes:
-      - ./velocity/velocity.toml:/opt/velocity/velocity.toml:ro
+      # Use Node B's specific config (backup = Node A's IP)
+      - ./velocity/velocity-node-b.toml:/opt/velocity/velocity.toml:ro
       - velocity-data-2:/opt/velocity
     networks:
       - gameserver-net
@@ -98,6 +101,10 @@ volumes:
 networks:
   gameserver-net:
     driver: bridge
+    enable_ipv6: true
     ipam:
       config:
-        - subnet: 172.20.0.0/24
+        - subnet: 172.21.0.0/24    # IPv4 – distinct subnet from Node A
+          gateway: 172.21.0.1
+        - subnet: fd21::/64         # IPv6 ULA – Node B (distinct from Node A fd20::/64)
+          gateway: fd21::1

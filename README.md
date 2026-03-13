@@ -87,13 +87,15 @@ GameServer/
 │   └── exports                    # /etc/exports Referenz-Vorlage für PC 3
 │
 ├── velocity/
-│   ├── velocity.toml              # Shared config für beide Proxy-Instanzen
+│   ├── velocity-node-a.toml       # Proxy-Config für Node A (backup = Node B)
+│   ├── velocity-node-b.toml       # Proxy-Config für Node B (backup = Node A)
 │   └── Dockerfile                 # Velocity-Container-Build
 │
 └── scripts/
     ├── watchdog.sh                # Session-Lock-Monitor (läuft in minecraft-backup)
     ├── entrypoint-backup.sh       # Entrypoint für Backup-Container
-    └── security-iptables.sh       # Firewall-Härtung (auf beiden Nodes ausführen)
+    ├── security-iptables.sh       # Firewall-Härtung (auf beiden Nodes ausführen)
+    └── setup-docker-ipv6.sh       # Docker-Daemon IPv6-Konfiguration
 ```
 
 ---
@@ -228,14 +230,20 @@ Watchdog-Wartemodus:
 
 ---
 
-### 7. velocity.toml anpassen
+### 7. Velocity-Configs anpassen
 
-In `velocity/velocity.toml` die Werte eintragen:
-- `backup = "192.168.1.11:25565"` → reale IP von Node B
-  *(auf Node B: `backup = "192.168.1.10:25565"` für Node A)*
-- `"play.yourdomain.de"` → Spieler-Domain
+Jeder Node hat eine eigene Konfigurationsdatei:
+
+| Datei | Node | backup zeigt auf |
+|---|---|---|
+| `velocity/velocity-node-a.toml` | Node A (PC 1) | Node B (192.168.1.11 / fd00::11) |
+| `velocity/velocity-node-b.toml` | Node B (PC 2) | Node A (192.168.1.10 / fd00::10) |
+
+In **beiden** Dateien folgende Werte setzen:
+- `backup`/`backup6` → reale IPv4/IPv6-IP des jeweils anderen Nodes (s. oben)
+- `"play.yourdomain.de"` → eigene Spieler-Domain
 - `forwarding_secret` → gleicher Wert wie `VELOCITY_SECRET` in `.env`
-- DNS / Port-Forwarding: Domain/öffentliche IP → **Proxy VIP (192.168.1.200):25565**
+- DNS / Port-Forwarding: Domain/öffentliche IP → **Proxy VIP (192.168.1.200 / fd00::200):25565**
 
 ---
 
@@ -328,6 +336,6 @@ ls -la /mnt/gamedata/worlds/world/session.lock
 ### Velocity verbindet nicht mit Backend
 ```bash
 docker logs velocity-proxy-1    # oder velocity-proxy-2
-# velocity.toml prüfen: forwarding_secret, Backend-IPs
+# velocity-node-a/b.toml prüfen: forwarding_secret, Backend-IPs
 # Paper-Config prüfen: paper-global.yml → proxies.velocity.secret
 ```

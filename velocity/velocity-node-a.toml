@@ -1,27 +1,20 @@
 # =============================================================================
-# velocity.toml – Velocity Proxy Configuration
+# velocity-node-a.toml – Velocity Proxy Configuration for Node A
 # =============================================================================
-# One copy of this file is used by BOTH proxy instances (velocity-proxy-1 on
-# Node A and velocity-proxy-2 on Node B).  Each proxy always tries its
-# co-located backend (localhost:25565) first, then falls back to the other node.
+# Used by velocity-proxy-1 on Node A.
+# - main   = co-located backend on this machine (localhost)
+# - backup = Node B's Minecraft backend (used if main is unreachable)
 #
-# ┌──────────────┐       ┌──────────────────────────┐
-# │  Players     │──────▶│  Proxy VIP (Keepalived)  │
-# └──────────────┘       └──────────┬───────────────┘
-#                                   │ routes to active proxy
-#                    ┌──────────────┴──────────────┐
-#                    │                             │
-#                    ▼                             ▼
-#           velocity-proxy-1             velocity-proxy-2
-#              (Node A)                     (Node B)
-#           tries main first             tries backup first
-#           then backup                  then main
+# Dual-stack: Velocity binds to [::] which on Linux accepts both IPv4
+# (via ::ffff: mapped addresses) and native IPv6 in a single socket.
+# Requires: net.ipv6.conf.all.disable_ipv6=0  (Linux default)
+#           java.net.preferIPv4Stack is NOT set (Velocity default)
 #
 # Documentation: https://docs.papermc.io/velocity/configuration
 # =============================================================================
 
-# The port Velocity listens on inside the container
-bind = "0.0.0.0:25577"
+# Bind to all interfaces, both IPv4 and IPv6 (dual-stack socket on Linux)
+bind = "[::]:25577"
 
 motd = "&6GameServer &7– &aHochverfügbar &r| &bHA-Setup"
 show_max_players = 500
@@ -40,22 +33,23 @@ kick_existing_players = false
 
 # ── Servers ──────────────────────────────────────────────────────────────────
 [servers]
-# localhost:25565 is the co-located Minecraft backend on the same machine.
-# The other node's backend is reached over the internal network.
-main   = "127.0.0.1:25565"      # co-located backend (same machine as this proxy)
-backup = "192.168.1.11:25565"   # ← Node B's real IP  (adjust if proxy is on Node B: use Node A's IP)
+# Co-located backend: try via IPv4 loopback first, IPv6 loopback as fallback.
+# Docker binds the Minecraft port to both 127.0.0.1 and ::1.
+main   = "127.0.0.1:25565"      # co-located backend IPv4 loopback (Node A)
+main6  = "[::1]:25565"           # co-located backend IPv6 loopback (Node A)
+# Remote backup backend on Node B (reachable over internal network)
+backup  = "192.168.1.11:25565"  # ← Node B IPv4 (set NODE_B_IP in .env)
+backup6 = "[fd00::11]:25565"    # ← Node B IPv6 (set NODE_B_IP6 in .env)
 
-# Connection attempt order: try co-located backend first, fall back to remote
-try = ["main", "backup"]
+# Connection attempt order: co-located first, then remote
+try = ["main", "main6", "backup", "backup6"]
 
 # ── Forced Hosts ──────────────────────────────────────────────────────────────
 [forced-hosts]
-# Players connecting via this domain are routed through the try list above
-"play.yourdomain.de" = ["main", "backup"]   # ← set your domain
+# Players connecting via domain are routed through the try list above
+"play.yourdomain.de" = ["main", "main6", "backup", "backup6"]   # ← set your domain
 
 # ── Advanced ─────────────────────────────────────────────────────────────────
-[advanced]
-# How long (ms) Velocity waits for a backend to respond before trying the next
 connection_timeout = 5000
 read_timeout       = 30000
 compression_threshold  = 256
