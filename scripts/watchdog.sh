@@ -60,7 +60,8 @@ promote() {
     log "=== NODE PROMOTION: Starting Minecraft server ==="
     # Signal healthcheck & other tools that we are now active
     touch /tmp/minecraft-active
-    exec "${MINECRAFT_CMD}"
+    # shellcheck disable=SC2086  # intentional word-splitting for command + args
+    exec ${MINECRAFT_CMD}
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 # GameServer – Hochverfügbares Minecraft-Setup (HA)
 
 Dieses Repository enthält das vollständige Infrastruktur-Setup für einen
-hochverfügbaren Minecraft-GameServer mit **Hot-Standby**, **Virtual IP (VIP)**
-und **Velocity-Proxy** auf zwei physischen Nodes.
+hochverfügbaren Minecraft-GameServer mit **Hot-Standby**, **doppeltem Velocity-Proxy**,
+**Virtual IP (VIP via Keepalived)** und **dediziertem NFS-Storage** auf drei physischen Rechnern.
 
 ---
 
@@ -12,37 +12,54 @@ und **Velocity-Proxy** auf zwei physischen Nodes.
 Internet
     │
     ▼
-┌─────────────────────────────────┐
-│         Velocity Proxy          │  ← Port 25565 (öffentlich)
-│   (docker-compose-velocity.yml) │
-└────────────┬────────────────────┘
-             │  Weiterleitung auf aktiven Backend
-    ┌────────┴─────────┐
-    │                  │
-    ▼                  ▼
-┌──────────┐      ┌──────────┐
-│  Node A  │      │  Node B  │
-│ (MASTER) │      │ (BACKUP) │
-│ Port 25565│      │ Port 25565│
-└────┬─────┘      └────┬─────┘
-     │                 │
-     └────────┬────────┘
-              │ NFS-Mount (hard,intr)
-              ▼
-    ┌─────────────────┐
-    │   NFS-Server    │
-    │ /srv/gamedata   │
-    │  (Weltdaten)    │
-    └─────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│             Proxy VIP: 192.168.1.200 (Keepalived)       │
+│  Players connect here – VIP floats between Node A & B   │
+└──────────────────┬──────────────────────────────────────┘
+                   │  routes to MASTER node
+       ┌───────────┴───────────┐
+       │                       │
+       ▼                       ▼
+┌──────────────────┐   ┌──────────────────┐
+│  PC 1 – Node A   │   │  PC 2 – Node B   │
+│  192.168.1.10    │   │  192.168.1.11    │
+│                  │   │                  │
+│  velocity-proxy-1│   │  velocity-proxy-2│  ← both always running;
+│  (MASTER / activ)│   │  (BACKUP / bereit)   traffic only on VIP-holder
+│        │         │   │        │         │
+│        ▼         │   │        ▼         │
+│  minecraft-      │   │  minecraft-      │
+│  primary         │   │  backup          │
+│  (läuft)         │   │  (watchdog-      │
+│                  │   │   gesteuert)     │
+└────────┬─────────┘   └────────┬─────────┘
+         │                      │
+         └──────────┬───────────┘
+                    │  NFS mount (hard,intr) über internes VLAN
+                    ▼
+          ┌─────────────────┐
+          │  PC 3 – NFS     │
+          │  192.168.1.5    │
+          │  /srv/gamedata  │
+          │  (Weltdaten,    │
+          │   session.lock) │
+          └─────────────────┘
 ```
 
-| Komponente | Rolle | Status |
+| Maschine | Services | Keepalived-Rolle |
 |---|---|---|
-| **Keepalived** | Verwaltet die virtuelle IP (VIP) | Aktiv auf beiden Nodes |
-| **NFS / Shared Disk** | Hält die Welt-Daten | Permanent gemountet |
-| **Docker Container A** | Primärer Gameserver | Läuft & hat Dateizugriff |
-| **Docker Container B** | Backup Gameserver | Läuft (Wartemodus/Standby) |
-| **Velocity Proxy** | Leitet Spieler um | Aktiv (prüft Erreichbarkeit) |
+| **PC 1 – Node A** | `minecraft-primary` + `velocity-proxy-1` | MASTER (priority 110) |
+| **PC 2 – Node B** | `minecraft-backup` + `velocity-proxy-2` | BACKUP (priority 100) |
+| **PC 3 – NFS**    | NFS-Server (`/srv/gamedata`) | — |
+
+| Komponente | Rolle |
+|---|---|
+| **Keepalived** | Verwaltet die Proxy-VIP; trackt Velocity- und Minecraft-Health |
+| **NFS / Shared Disk** | Hält die Welt-Daten + `session.lock` |
+| **minecraft-primary** | Primärer Gameserver – hat aktiven Dateizugriff |
+| **minecraft-backup** | Backup – Watchdog wartet auf Lock-Freigabe |
+| **velocity-proxy-1** | Velocity auf Node A – aktiv wenn VIP hier liegt |
+| **velocity-proxy-2** | Velocity auf Node B – aktiv nach Failover |
 
 ---
 
@@ -50,44 +67,44 @@ Internet
 
 ```
 GameServer/
-├── docker-compose-node-a.yml      # Primärer Minecraft-Container
-├── docker-compose-node-b.yml      # Backup-Container (Hot-Standby)
-├── docker-compose-velocity.yml    # Velocity-Proxy
+├── docker-compose-node-a.yml      # Node A: Minecraft Primary + Velocity Proxy 1
+├── docker-compose-node-b.yml      # Node B: Minecraft Backup  + Velocity Proxy 2
 ├── .env.example                   # Vorlage für Umgebungsvariablen
 ├── .gitignore
 │
 ├── keepalived/
 │   ├── node-a/
-│   │   └── keepalived.conf        # Keepalived-Konfig für Node A (MASTER)
+│   │   └── keepalived.conf        # MASTER – verwaltet Proxy VIP
 │   ├── node-b/
-│   │   └── keepalived.conf        # Keepalived-Konfig für Node B (BACKUP)
-│   ├── check_minecraft.sh         # Health-Check-Skript für Keepalived
+│   │   └── keepalived.conf        # BACKUP – übernimmt VIP bei Ausfall
+│   ├── check_minecraft.sh         # Health-Check: Minecraft-Container
+│   ├── check_velocity.sh          # Health-Check: Velocity-Proxy-Container
 │   └── notify.sh                  # State-Change-Benachrichtigung
 │
 ├── nfs/
-│   ├── setup-nfs-server.sh        # NFS-Server einrichten (einmalig)
-│   ├── setup-nfs-client.sh        # NFS-Client mounten (auf beiden Nodes)
-│   └── exports                    # /etc/exports-Referenz
+│   ├── setup-nfs-server.sh        # Auf PC 3 ausführen (NFS-Server einrichten)
+│   ├── setup-nfs-client.sh        # Auf Node A & B ausführen (NFS mounten)
+│   └── exports                    # /etc/exports Referenz-Vorlage für PC 3
 │
 ├── velocity/
-│   ├── velocity.toml              # Velocity-Proxy-Konfiguration
+│   ├── velocity.toml              # Shared config für beide Proxy-Instanzen
 │   └── Dockerfile                 # Velocity-Container-Build
 │
 └── scripts/
-    ├── watchdog.sh                # Session-Lock-Monitor (läuft in Container B)
+    ├── watchdog.sh                # Session-Lock-Monitor (läuft in minecraft-backup)
     ├── entrypoint-backup.sh       # Entrypoint für Backup-Container
-    └── security-iptables.sh       # Firewall-Härtung (iptables)
+    └── security-iptables.sh       # Firewall-Härtung (auf beiden Nodes ausführen)
 ```
 
 ---
 
 ## Voraussetzungen
 
-- Zwei physische Maschinen / VMs mit **Linux** (Debian/Ubuntu empfohlen)
-- **Docker** und **Docker Compose** auf beiden Nodes
-- **Keepalived** auf beiden Nodes (wird per Skript installiert)
-- Ein **NFS-Server** (kann eine dritte Maschine oder Node A selbst sein)
-- Netzwerk-Konnektivität zwischen allen Komponenten
+- Drei physische Rechner / VMs mit **Linux** (Debian/Ubuntu empfohlen)
+- **Docker** und **Docker Compose** auf Node A und Node B
+- **Keepalived** auf Node A und Node B
+- **nfs-kernel-server** auf PC 3 (NFS-Server)
+- Internes Netzwerk (VLAN/Switch) zwischen allen drei Rechnern
 
 ---
 
@@ -95,197 +112,186 @@ GameServer/
 
 ### 1. Umgebungsvariablen konfigurieren
 
-Kopiere `.env.example` nach `.env` und passe alle Werte an:
+Auf **Node A und Node B** je eine `.env`-Datei anlegen:
 
 ```bash
 cp .env.example .env
-# Öffne .env und trage alle IP-Adressen und Secrets ein
-nano .env
+nano .env   # alle IPs und Secrets eintragen
 ```
 
-> **Wichtig:** Committe niemals die `.env`-Datei!
+> **Wichtig:** Committe niemals die `.env`-Datei in Git!
 
 ---
 
-### 2. NFS-Server einrichten
-
-Führe dieses Skript **einmalig** auf dem NFS-Server-Rechner aus:
+### 2. NFS-Server einrichten (PC 3 – dedizierter Storage-Rechner)
 
 ```bash
-# NFS-Server-IP-Adressen in setup-nfs-server.sh anpassen, dann:
+# Nur auf PC 3 ausführen:
 chmod +x nfs/setup-nfs-server.sh
 sudo nfs/setup-nfs-server.sh
 ```
 
-Das Skript:
-- Installiert `nfs-kernel-server`
-- Erstellt `/srv/gamedata/worlds`
-- Schreibt `/etc/exports` mit Zugriff nur für Node A und Node B
-- Startet den NFS-Dienst
+Das Skript installiert `nfs-kernel-server`, erstellt `/srv/gamedata/worlds`,
+schreibt `/etc/exports` mit Zugriff exklusiv für Node A und Node B
+und startet den NFS-Dienst.
 
 ---
 
-### 3. NFS-Client auf beiden Nodes einrichten
-
-Führe dieses Skript auf **Node A** und **Node B** aus:
+### 3. NFS-Client mounten (Node A und Node B)
 
 ```bash
+# Auf Node A ausführen:
 chmod +x nfs/setup-nfs-client.sh
+sudo NFS_SERVER_IP=192.168.1.5 nfs/setup-nfs-client.sh
+
+# Auf Node B dasselbe:
 sudo NFS_SERVER_IP=192.168.1.5 nfs/setup-nfs-client.sh
 ```
 
-Die Mount-Option `hard,intr` stellt sicher, dass der Prozess wartet (anstatt
-mit einem IO-Fehler abzustürzen), wenn das Netzwerk kurz nicht erreichbar ist.
+Die Mount-Option `hard,intr` stellt sicher, dass der Prozess **wartet** statt
+mit einem IO-Fehler abzustürzen, wenn das Netzwerk kurz weg ist.
 
-Überprüfe den Mount:
 ```bash
-mountpoint /mnt/gamedata
-df -h /mnt/gamedata
+# Verify:
+mountpoint /mnt/gamedata && df -h /mnt/gamedata
 ```
 
 ---
 
-### 4. Keepalived einrichten
-
-Installiere Keepalived auf **beiden Nodes**:
+### 4. Keepalived einrichten (Node A und Node B)
 
 ```bash
-sudo apt-get install -y keepalived
+sudo apt-get install -y keepalived netcat-openbsd
 ```
 
-Kopiere die Konfigurationsdateien:
-
+**Auf Node A:**
 ```bash
-# Auf Node A:
 sudo cp keepalived/node-a/keepalived.conf /etc/keepalived/keepalived.conf
 sudo cp keepalived/check_minecraft.sh     /etc/keepalived/check_minecraft.sh
+sudo cp keepalived/check_velocity.sh      /etc/keepalived/check_velocity.sh
 sudo cp keepalived/notify.sh              /etc/keepalived/notify.sh
-sudo chmod +x /etc/keepalived/check_minecraft.sh /etc/keepalived/notify.sh
-
-# Auf Node B:
-sudo cp keepalived/node-b/keepalived.conf /etc/keepalived/keepalived.conf
-sudo cp keepalived/check_minecraft.sh     /etc/keepalived/check_minecraft.sh
-sudo cp keepalived/notify.sh              /etc/keepalived/notify.sh
-sudo chmod +x /etc/keepalived/check_minecraft.sh /etc/keepalived/notify.sh
+sudo chmod +x /etc/keepalived/check_minecraft.sh \
+              /etc/keepalived/check_velocity.sh \
+              /etc/keepalived/notify.sh
 ```
 
-Passe in **beiden** `keepalived.conf`-Dateien an:
-- `interface` → dein Netzwerk-Interface (z.B. `eth0`, `ens3`)
-- `192.168.1.100/24` → deine gewünschte Virtual IP (VIP)
-- `CHANGE_ME_SECRET` → ein starkes, gemeinsames Passwort
+**Auf Node B** (analog mit node-b/keepalived.conf):
+```bash
+sudo cp keepalived/node-b/keepalived.conf /etc/keepalived/keepalived.conf
+sudo cp keepalived/check_minecraft.sh     /etc/keepalived/check_minecraft.sh
+sudo cp keepalived/check_velocity.sh      /etc/keepalived/check_velocity.sh
+sudo cp keepalived/notify.sh              /etc/keepalived/notify.sh
+sudo chmod +x /etc/keepalived/check_minecraft.sh \
+              /etc/keepalived/check_velocity.sh \
+              /etc/keepalived/notify.sh
+```
 
-Starte Keepalived:
+In **beiden** `keepalived.conf`-Dateien anpassen:
+- `interface` → Netzwerk-Interface (z.B. `eth0`, `ens3`)
+- `192.168.1.200/24` → Proxy VIP (öffentliche IP, auf die DNS zeigt)
+- `CHANGE_ME_SECRET` → starkes, gemeinsames Passwort
 
 ```bash
 sudo systemctl enable keepalived
 sudo systemctl start keepalived
-# Status prüfen:
-sudo systemctl status keepalived
 ip addr show   # VIP sollte auf Node A sichtbar sein
 ```
 
 ---
 
-### 5. Primären GameServer starten (Node A)
+### 5. Node A starten (Minecraft Primary + Velocity Proxy 1)
 
 ```bash
-# In der .env sicherstellen, dass VELOCITY_SECRET gesetzt ist
+# Velocity-Image bauen und alle Services starten:
 docker compose -f docker-compose-node-a.yml --env-file .env up -d
+
+# Logs beobachten:
 docker compose -f docker-compose-node-a.yml logs -f
 ```
 
 ---
 
-### 6. Backup-Container starten (Node B)
+### 6. Node B starten (Minecraft Backup + Velocity Proxy 2)
 
 ```bash
 docker compose -f docker-compose-node-b.yml --env-file .env up -d
 docker compose -f docker-compose-node-b.yml logs -f
 ```
 
-Der Container startet, führt aber **keinen** Minecraft-Prozess aus.
-Das `watchdog.sh`-Skript überwacht `session.lock` auf dem NFS-Mount.
+Velocity Proxy 2 startet sofort und ist bereit. Minecraft Backup bleibt im
+Watchdog-Wartemodus:
 
-Watchdog-Log beobachten:
-```bash
-docker logs -f minecraft-backup
-# Erwartete Ausgabe:
-# [watchdog] ... Watchdog started on backup node.
-# [watchdog] ... Waiting for primary lock to disappear at: /data/worlds/world/session.lock
-# [watchdog] ... Lock absent (0/2)...   ← wenn primary aktiv ist, setzt sich der Zähler zurück
+```
+[watchdog] Watchdog started on backup node.
+[watchdog] Waiting for primary lock to disappear at: /data/worlds/world/session.lock
 ```
 
 ---
 
-### 7. Velocity Proxy starten
+### 7. velocity.toml anpassen
 
-Passe `velocity/velocity.toml` an:
-- `main = "192.168.1.10:25565"` → IP von Node A
-- `backup = "192.168.1.11:25565"` → IP von Node B
-- `"play.yourdomain.de"` → deine Spieler-Domain
-- `forwarding_secret` → selber Wert wie `VELOCITY_SECRET` in `.env`
-
-```bash
-docker compose -f docker-compose-velocity.yml up -d
-docker compose -f docker-compose-velocity.yml logs -f
-```
+In `velocity/velocity.toml` die Werte eintragen:
+- `backup = "192.168.1.11:25565"` → reale IP von Node B
+  *(auf Node B: `backup = "192.168.1.10:25565"` für Node A)*
+- `"play.yourdomain.de"` → Spieler-Domain
+- `forwarding_secret` → gleicher Wert wie `VELOCITY_SECRET` in `.env`
+- DNS / Port-Forwarding: Domain/öffentliche IP → **Proxy VIP (192.168.1.200):25565**
 
 ---
 
-### 8. Firewall härten
-
-Führe das iptables-Skript auf **beiden Nodes** aus:
+### 8. Firewall härten (Node A und Node B)
 
 ```bash
-# IPs in security-iptables.sh anpassen, dann:
 chmod +x scripts/security-iptables.sh
 sudo scripts/security-iptables.sh
 ```
-
-Das Skript stellt sicher, dass Port 25565 **ausschließlich** vom Velocity-Proxy
-erreichbar ist. NFS-Traffic wird auf das interne Storage-Interface beschränkt.
 
 ---
 
 ## Failover-Ablauf
 
 ```
-1. Node A (Primär) fällt aus
+1. Node A (Primary) fällt aus
         │
         ▼
-2. Keepalived erkennt den Ausfall (check_minecraft.sh gibt 1 zurück)
-   → VIP springt von Node A auf Node B (~1-2 Sekunden)
+2. Keepalived-Health-Checks schlagen fehl (check_velocity.sh / check_minecraft.sh)
+   Priorität auf Node A sinkt unter 100 → Node B gewinnt das VRRP
+   → Proxy VIP springt von Node A auf Node B (~1–2 Sekunden)
         │
         ▼
-3. watchdog.sh auf Node B erkennt, dass session.lock verschwunden ist
-   (nach LOCK_TIMEOUT Sekunden, Standard: 10s)
+3. Velocity Proxy 2 (Node B) empfängt jetzt Spieler-Traffic
+   Velocity versucht zuerst localhost:25565 (minecraft-backup)
+   → noch nicht aktiv, Fallback auf 192.168.1.10:25565 (Node A)
+   → Node A ist tot, Timeout → Fehler / Spieler warten kurz
         │
         ▼
-4. watchdog.sh promoted Node B → startet Minecraft-Prozess
+4. watchdog.sh erkennt, dass session.lock auf NFS verschwunden ist
+   (nach LOCK_TIMEOUT Sekunden, Standard: 10 s)
+   → startet Minecraft-Prozess auf Node B
         │
         ▼
-5. Velocity-Proxy erkennt, dass 'main' (Node A) nicht antwortet
-   → verbindet neue Spieler automatisch mit 'backup' (Node B)
+5. Velocity Proxy 2 verbindet Spieler erfolgreich mit localhost:25565 (Node B)
         │
         ▼
-6. Spieler können sich neu verbinden und landen auf Node B
+6. Spieler sind wieder online auf Node B
 ```
 
-**Gesamte Downtime:** ca. 10–30 Sekunden (konfigurierbar über `LOCK_TIMEOUT`)
+**Gesamte Downtime:** ~10–30 Sekunden (konfigurierbar über `LOCK_TIMEOUT`)
 
 ---
 
 ## Sicherheit
 
-- **Docker-Ports:** Minecraft-Port 25565 ist über iptables auf die Proxy-IP beschränkt.
-- **NFS:** Läuft über ein separates internes VLAN/Interface – kein Weltdaten-Traffic über das öffentliche Netz.
-- **Velocity:** Übernimmt die Spieler-Authentifizierung (online_mode=true auf dem Proxy, false auf den Backends).
-- **Secrets:** Velocity-Forwarding-Secret und Keepalived-Auth-Passwort nie im Git commiten.
-- **DDoS:** Für DDoS-Schutz TCP-Shield oder Cloudflare Spectrum vor Velocity schalten.
+- **Velocity-Port (25565):** Öffentlich zugänglich – Velocity übernimmt Authentifizierung.
+- **Minecraft-Backend-Port:** Per Docker auf `127.0.0.1` gebunden → nur lokaler Proxy-Zugriff.
+- **NFS:** Läuft über ein separates internes VLAN (PC 3 ist nur intern erreichbar).
+- **Velocity Modern Forwarding:** Spieler-IPs werden sicher von Velocity an die Backends weitergegeben.
+- **Secrets:** `VELOCITY_SECRET` und `KEEPALIVED_AUTH_PASS` niemals in Git commiten.
+- **DDoS:** Für DDoS-Schutz Cloudflare Spectrum oder TCP-Shield vor die Proxy-VIP schalten.
 
 ---
 
-## Umgebungsvariablen für den Watchdog
+## Watchdog – Umgebungsvariablen
 
 | Variable | Standard | Beschreibung |
 |---|---|---|
@@ -300,26 +306,28 @@ erreichbar ist. NFS-Traffic wird auf das interne Storage-Interface beschränkt.
 
 ### NFS-Mount nicht verfügbar
 ```bash
-sudo mount -a           # Manuell alle fstab-Einträge mounten
-showmount -e <NFS_IP>   # NFS-Exporte prüfen
+sudo mount -a                     # Manuell alle fstab-Einträge mounten
+showmount -e 192.168.1.5          # NFS-Exporte auf PC 3 prüfen
+sudo systemctl status nfs-server  # NFS-Dienst auf PC 3 prüfen
 ```
 
 ### VIP springt nicht um
 ```bash
 sudo systemctl status keepalived
 sudo journalctl -u keepalived -n 50
-/etc/keepalived/check_minecraft.sh   # Skript manuell testen
+sudo /etc/keepalived/check_velocity.sh   # Skripte manuell testen
+sudo /etc/keepalived/check_minecraft.sh
 ```
 
 ### Watchdog promotet nicht
 ```bash
-docker logs minecraft-backup         # Watchdog-Ausgabe prüfen
-ls -la /mnt/gamedata/worlds/world/session.lock   # Lock-Status prüfen
+docker logs minecraft-backup
+ls -la /mnt/gamedata/worlds/world/session.lock
 ```
 
-### Velocity verbindet nicht
+### Velocity verbindet nicht mit Backend
 ```bash
-docker logs velocity-proxy
-# In velocity.toml: backend-IPs und forwarding_secret prüfen
-# In Paper: paper-global.yml → proxies.velocity.secret muss stimmen
+docker logs velocity-proxy-1    # oder velocity-proxy-2
+# velocity.toml prüfen: forwarding_secret, Backend-IPs
+# Paper-Config prüfen: paper-global.yml → proxies.velocity.secret
 ```

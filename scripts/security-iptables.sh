@@ -4,26 +4,33 @@
 # =============================================================================
 # Run this script on BOTH Node A and Node B (as root / sudo).
 #
-# What it does:
+# Architecture (3 PCs):
+#   PC 1 (Node A) – Minecraft Primary + Velocity Proxy 1 – 192.168.1.10
+#   PC 2 (Node B) – Minecraft Backup  + Velocity Proxy 2 – 192.168.1.11
+#   PC 3 (NFS)    – Dedicated storage (no game process)   – 192.168.1.5
+#
+# What this script does:
 #   1. Allows established/related connections (stateful firewall)
-#   2. Allows SSH from anywhere (adjust the source if possible)
-#   3. Allows Minecraft traffic (25565) ONLY from the Velocity proxy IP
-#   4. Allows NFS traffic ONLY over the internal storage VLAN interface
-#   5. Allows VRRP (Keepalived) multicast between the two nodes
-#   6. Drops everything else
+#   2. Allows SSH from anywhere (restrict the source IP in production!)
+#   3. Exposes the public Velocity port (25565) to the world (proxy is here)
+#   4. Restricts the Minecraft backend port (25565 on 127.0.0.1) so ONLY the
+#      local Velocity proxy can reach it (Docker binds to 127.0.0.1 already)
+#   5. Allows NFS traffic ONLY over the internal storage VLAN interface
+#   6. Allows VRRP (Keepalived) multicast between the two nodes
+#   7. Drops everything else
 #
 # Adjust the variables below before running.
 # =============================================================================
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-PROXY_IP="192.168.1.20"          # IP of the Velocity proxy  (adjust!)
 NODE_A_IP="192.168.1.10"         # IP of Node A              (adjust!)
 NODE_B_IP="192.168.1.11"         # IP of Node B              (adjust!)
-NFS_SERVER_IP="192.168.1.5"      # IP of NFS server          (adjust!)
+NFS_SERVER_IP="192.168.1.5"      # IP of dedicated NFS PC    (adjust!)
 INTERNAL_IFACE="eth1"            # NIC used for storage VLAN (adjust!)
 PUBLIC_IFACE="eth0"              # NIC facing the internet   (adjust!)
-MC_PORT="25565"
+VELOCITY_PORT="25565"            # Public port players connect to
+MC_BACKEND_PORT="25565"          # Minecraft backend (localhost-only binding)
 NFS_PORT="2049"
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -55,10 +62,17 @@ iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 # ── SSH – allow from anywhere (restrict source IP in production!) ─────────────
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 
-# ── Minecraft – only from Velocity proxy ─────────────────────────────────────
-log "Restricting port ${MC_PORT} to Velocity proxy IP ${PROXY_IP}..."
-iptables -A INPUT -p tcp --dport "${MC_PORT}" -s "${PROXY_IP}" -j ACCEPT
-iptables -A INPUT -p tcp --dport "${MC_PORT}" -j DROP
+# ── Velocity proxy port – public, accept from anywhere ───────────────────────
+# The Velocity container listens on 0.0.0.0:25565 and handles authentication.
+log "Allowing public Velocity port ${VELOCITY_PORT}..."
+iptables -A INPUT -p tcp --dport "${VELOCITY_PORT}" -j ACCEPT
+
+# ── Minecraft backend – Docker binds to 127.0.0.1; block on all other IPs ────
+# The Minecraft container's port is bound to 127.0.0.1 in docker-compose so
+# external hosts cannot reach it directly. This rule is a belt-and-suspenders
+# safeguard to drop any attempt on the external interface.
+log "Blocking Minecraft backend port ${MC_BACKEND_PORT} on external interface..."
+iptables -A INPUT -i "${PUBLIC_IFACE}" -p tcp --dport "${MC_BACKEND_PORT}" -j DROP
 
 # ── NFS – only over internal storage interface ────────────────────────────────
 log "Restricting NFS port ${NFS_PORT} to internal interface ${INTERNAL_IFACE}..."
@@ -82,8 +96,9 @@ log "Persisting iptables rules..."
 if command -v iptables-save > /dev/null; then
     iptables-save > /etc/iptables/rules.v4
 fi
-# On Debian/Ubuntu you can also use:  apt-get install iptables-persistent
-# And then:  netfilter-persistent save
+# On Debian/Ubuntu you can also install iptables-persistent:
+#   apt-get install iptables-persistent
+#   netfilter-persistent save
 
 log "Firewall rules applied successfully."
 iptables -L INPUT -n --line-numbers

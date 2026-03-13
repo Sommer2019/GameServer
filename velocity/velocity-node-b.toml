@@ -1,0 +1,70 @@
+# =============================================================================
+# velocity.toml – Velocity Proxy Configuration
+# =============================================================================
+# One copy of this file is used by BOTH proxy instances (velocity-proxy-1 on
+# Node A and velocity-proxy-2 on Node B).  Each proxy always tries its
+# co-located backend (localhost:25565) first, then falls back to the other node.
+#
+# ┌──────────────┐       ┌──────────────────────────┐
+# │  Players     │──────▶│  Proxy VIP (Keepalived)  │
+# └──────────────┘       └──────────┬───────────────┘
+#                                   │ routes to active proxy
+#                    ┌──────────────┴──────────────┐
+#                    │                             │
+#                    ▼                             ▼
+#           velocity-proxy-1             velocity-proxy-2
+#              (Node A)                     (Node B)
+#           tries main first             tries backup first
+#           then backup                  then main
+#
+# Documentation: https://docs.papermc.io/velocity/configuration
+# =============================================================================
+
+# The port Velocity listens on inside the container
+bind = "0.0.0.0:25577"
+
+motd = "&6GameServer &7– &aHochverfügbar &r| &bHA-Setup"
+show_max_players = 500
+
+# Velocity handles authentication; backends run in offline mode
+online_mode = true
+
+# Use MODERN forwarding with Paper backends
+player_info_forwarding_mode = "MODERN"
+
+# Forwarding secret – must match PAPER_VELOCITY_SECRET in docker-compose files
+# Generate with: openssl rand -hex 16
+forwarding_secret = "CHANGE_ME_SECRET_HERE"
+
+kick_existing_players = false
+
+# ── Servers ──────────────────────────────────────────────────────────────────
+[servers]
+# localhost:25565 is the co-located Minecraft backend on the same machine.
+# The other node's backend is reached over the internal network.
+main   = "127.0.0.1:25565"      # co-located backend (same machine as this proxy)
+backup = "192.168.1.11:25565"   # ← Node B's real IP  (adjust if proxy is on Node B: use Node A's IP)
+
+# Connection attempt order: try co-located backend first, fall back to remote
+try = ["main", "backup"]
+
+# ── Forced Hosts ──────────────────────────────────────────────────────────────
+[forced-hosts]
+# Players connecting via this domain are routed through the try list above
+"play.yourdomain.de" = ["main", "backup"]   # ← set your domain
+
+# ── Advanced ─────────────────────────────────────────────────────────────────
+[advanced]
+# How long (ms) Velocity waits for a backend to respond before trying the next
+connection_timeout = 5000
+read_timeout       = 30000
+compression_threshold  = 256
+compression_level      = -1
+login_ratelimit = 2000
+
+# ── Query ────────────────────────────────────────────────────────────────────
+[query]
+enabled     = true
+port        = 25577
+map         = "Velocity"
+show_plugins = false

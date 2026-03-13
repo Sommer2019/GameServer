@@ -1,17 +1,26 @@
 version: "3.9"
 
 # ============================================================
-# Node A – PRIMARY (Active) Minecraft GameServer
+# Node A – PRIMARY (Active) Minecraft GameServer + Velocity Proxy 1
 # ============================================================
+# This node runs TWO services:
+#   1. minecraft-primary  – the active Minecraft backend
+#   2. velocity-proxy-1   – the public-facing Velocity proxy
+#
+# Keepalived on this host holds the public Proxy VIP when healthy.
+# Players always connect to the Proxy VIP; it lives here by default.
+#
 # Prerequisites:
 #   - Shared NFS volume is already mounted at /mnt/gamedata on this host
-#   - Keepalived is running and this node holds the VIP
+#   - Keepalived is running (see keepalived/node-a/keepalived.conf)
 #
 # Usage:
 #   docker compose -f docker-compose-node-a.yml up -d
 # ============================================================
 
 services:
+
+  # ── 1. Minecraft Backend (primary / active) ──────────────────────────────
   minecraft-primary:
     image: itzg/minecraft-server:latest
     container_name: minecraft-primary
@@ -21,7 +30,7 @@ services:
       TYPE: "PAPER"
       VERSION: "1.21.4"
       MEMORY: "4G"
-      # Allow only connections from the Velocity proxy (forwarding mode)
+      # Offline mode – auth is handled by Velocity
       ONLINE_MODE: "FALSE"
       ENFORCE_SECURE_PROFILE: "FALSE"
       # Velocity modern forwarding secret – must match velocity.toml
@@ -29,13 +38,14 @@ services:
       # Performance tuning
       JVM_XX_OPTS: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
     volumes:
-      # Shared NFS mount – world data lives here
+      # Shared NFS mount – world data lives here (read/write)
       - /mnt/gamedata/worlds:/data/worlds
-      # Server config & plugins persist locally (fast disk)
+      # Server config & plugins persist on the local fast disk
       - minecraft-config:/data
     ports:
-      # Expose ONLY to the Velocity proxy IP; iptables rules handle this externally
-      - "25565:25565"
+      # Bind only to localhost so only the co-located proxy can reach it.
+      # iptables rules (scripts/security-iptables.sh) enforce this externally.
+      - "127.0.0.1:25565:25565"
     networks:
       - gameserver-net
     healthcheck:
@@ -48,8 +58,38 @@ services:
       role: "primary"
       node: "node-a"
 
+  # ── 2. Velocity Proxy (instance 1 – lives on Node A) ─────────────────────
+  velocity-proxy-1:
+    build:
+      context: ./velocity
+      dockerfile: Dockerfile
+    image: gameserver-velocity:latest
+    container_name: velocity-proxy-1
+    restart: unless-stopped
+    depends_on:
+      - minecraft-primary
+    ports:
+      # Public-facing port – Keepalived Proxy VIP points here
+      - "25565:25577"
+    volumes:
+      - ./velocity/velocity.toml:/opt/velocity/velocity.toml:ro
+      - velocity-data-1:/opt/velocity
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 25577 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      role: "proxy"
+      node: "node-a"
+
 volumes:
   minecraft-config:
+    driver: local
+  velocity-data-1:
     driver: local
 
 networks:
