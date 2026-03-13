@@ -32,6 +32,13 @@ cp test/ipv4-lab/.env.example test/ipv4-lab/.env
 
 Die Werte müssen zu PC 1 passen.
 
+Standardwerte für dein Lab:
+
+- `PROXY_VIP=172.29.80.200`
+- `NODE_A_IP=172.29.80.10`
+- `NODE_B_IP=172.29.80.11`
+- `NFS_SERVER_IP=172.29.80.5`
+
 ## 3. Velocity-Konfiguration anpassen
 
 Öffne `test/ipv4-lab/velocity/velocity-node-b.toml` und setze:
@@ -46,13 +53,13 @@ Die Werte müssen zu PC 1 passen.
 
 - `interface eth0` → auf dein echtes Interface ändern
 - `auth_pass labpass1` → gleicher Wert wie auf Node A
-- `192.168.1.200/24` → gleiche VIP wie auf Node A
+- `172.29.80.200/24` → gleiche VIP wie auf Node A
 
 ## 5. NFS-Client mounten
 
 ```bash
 chmod +x nfs/setup-nfs-client.sh
-sudo NFS_SERVER_IP=192.168.1.5 bash nfs/setup-nfs-client.sh
+sudo NFS_SERVER_IP=172.29.80.5 bash nfs/setup-nfs-client.sh
 mountpoint /mnt/gamedata
 ```
 

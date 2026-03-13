@@ -17,7 +17,7 @@ kick_existing_players = false
 [servers]
 lobby  = "127.0.0.1:25566"
 main   = "127.0.0.1:25565"
-backup = "192.168.1.10:25565"
+backup = "172.29.80.10:25565"
 try = ["main", "backup", "lobby"]
 
 [forced-hosts]

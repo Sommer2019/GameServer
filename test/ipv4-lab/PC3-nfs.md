@@ -8,6 +8,12 @@ Diese Anleitung richtet den **dedizierten NFS-Server** für das IPv4-Testlab ein
 - Node A und Node B dürfen per IPv4 darauf zugreifen
 - noch **kein IPv6** nötig
 
+Für dein Lab gilt dabei standardmäßig:
+
+- **PC 1 / Node A:** `172.29.80.10`
+- **PC 2 / Node B:** `172.29.80.11`
+- **PC 3 / NFS:** `172.29.80.5`
+
 ## 1. Repo bereitstellen
 
 ```bash
@@ -28,7 +34,7 @@ chmod +x nfs/setup-nfs-server.sh
 - `NODE_B_IP`
 - optional die IPv6-Werte ignorieren, wenn du jetzt nur IPv4 testest
 
-Wenn deine Test-IP-Adressen den Defaults entsprechen (`192.168.1.10`, `192.168.1.11`), musst du nichts ändern.
+Wenn deine Test-IP-Adressen den Defaults entsprechen (`172.29.80.10`, `172.29.80.11`), musst du nichts ändern.
 
 ## 4. NFS-Server einrichten
 
@@ -59,6 +65,6 @@ Diese Ports **nicht** nach außen freigeben.
 Wenn alles passt, können PC 1 und PC 2 später Folgendes erfolgreich ausführen:
 
 ```bash
-sudo NFS_SERVER_IP=192.168.1.5 bash nfs/setup-nfs-client.sh
+sudo NFS_SERVER_IP=172.29.80.5 bash nfs/setup-nfs-client.sh
 ```
 

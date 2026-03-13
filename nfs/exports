@@ -8,9 +8,9 @@
 #   sudo exportfs -rav
 #
 # Machines (dual-stack IPv4 + IPv6):
-#   PC 1 (Node A)  – Minecraft Primary + Velocity Proxy 1  – 192.168.1.10 / fd00::10
-#   PC 2 (Node B)  – Minecraft Backup  + Velocity Proxy 2  – 192.168.1.11 / fd00::11
-#   PC 3 (NFS)     – Dedicated storage server              – 192.168.1.5  / fd00::5
+#   PC 1 (Node A)  – Minecraft Primary + Velocity Proxy 1  – 172.29.80.10 / fd00::10
+#   PC 2 (Node B)  – Minecraft Backup  + Velocity Proxy 2  – 172.29.80.11 / fd00::11
+#   PC 3 (NFS)     – Dedicated storage server              – 172.29.80.5  / fd00::5
 #
 # Format:
 #   <directory>  <client>(<options>)  ...
@@ -18,4 +18,4 @@
 # =============================================================================
 
 # Shared game-world data – accessible by Node A and Node B only (IPv4 + IPv6)
-/srv/gamedata  192.168.1.10(rw,sync,no_subtree_check,no_root_squash)  192.168.1.11(rw,sync,no_subtree_check,no_root_squash)  [fd00::10](rw,sync,no_subtree_check,no_root_squash)  [fd00::11](rw,sync,no_subtree_check,no_root_squash)
+/srv/gamedata  172.29.80.10(rw,sync,no_subtree_check,no_root_squash)  172.29.80.11(rw,sync,no_subtree_check,no_root_squash)  [fd00::10](rw,sync,no_subtree_check,no_root_squash)  [fd00::11](rw,sync,no_subtree_check,no_root_squash)

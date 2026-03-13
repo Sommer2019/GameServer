@@ -23,8 +23,8 @@ set -euo pipefail
 EXPORT_DIR="/srv/gamedata"
 
 # IPv4 addresses of the game-server nodes
-NODE_A_IP="192.168.1.10"
-NODE_B_IP="192.168.1.11"
+NODE_A_IP="172.29.80.10"
+NODE_B_IP="172.29.80.11"
 
 # IPv6 addresses of the game-server nodes (ULA; adjust to match your prefix)
 NODE_A_IP6="fd00::10"

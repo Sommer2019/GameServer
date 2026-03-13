@@ -30,6 +30,13 @@ cp test/ipv4-lab/.env.example test/ipv4-lab/.env
 - `MC_VERSION`
 - `MC_MEMORY`
 
+Standardwerte für dein Lab:
+
+- `PROXY_VIP=172.29.80.200`
+- `NODE_A_IP=172.29.80.10`
+- `NODE_B_IP=172.29.80.11`
+- `NFS_SERVER_IP=172.29.80.5`
+
 ## 3. Velocity-Konfiguration anpassen
 
 Öffne `test/ipv4-lab/velocity/velocity-node-a.toml` und setze:
@@ -44,13 +51,13 @@ cp test/ipv4-lab/.env.example test/ipv4-lab/.env
 
 - `interface eth0` → auf dein echtes Interface ändern
 - `auth_pass labpass1` → auf deinen Lab-Wert ändern
-- `192.168.1.200/24` → auf deine VIP ändern
+- `172.29.80.200/24` → auf deine VIP ändern
 
 ## 5. NFS-Client mounten
 
 ```bash
 chmod +x nfs/setup-nfs-client.sh
-sudo NFS_SERVER_IP=192.168.1.5 bash nfs/setup-nfs-client.sh
+sudo NFS_SERVER_IP=172.29.80.5 bash nfs/setup-nfs-client.sh
 mountpoint /mnt/gamedata
 ```
 
@@ -97,6 +104,6 @@ sudo systemctl status keepalived
 Von einem anderen Rechner im gleichen Netz:
 
 ```bash
-nc -vz 192.168.1.200 25565
+nc -vz 172.29.80.200 25565
 ```
 

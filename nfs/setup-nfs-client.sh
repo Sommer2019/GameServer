@@ -12,7 +12,7 @@
 #
 # Usage (as root or with sudo):
 #   chmod +x setup-nfs-client.sh
-#   sudo NFS_SERVER_IP=192.168.1.5 ./setup-nfs-client.sh        # IPv4
+#   sudo NFS_SERVER_IP=172.29.80.5 ./setup-nfs-client.sh        # IPv4
 #   sudo NFS_SERVER_IP=fd00::5     ./setup-nfs-client.sh        # IPv6
 #
 # Required environment variable:

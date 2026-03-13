@@ -31,6 +31,17 @@ Dieses Verzeichnis enthält eine **saubere IPv4-Testumgebung**, ohne die bestehe
 4. Failover testen
 5. später `SPAETER-ipv6.md` nutzen
 
+## Standard-IP-Plan für dein IPv4-Lab
+
+Wenn du das Lab wie besprochen im Netz `172.29.80.0/24` aufbaust, verwende diese Defaults:
+
+- **PC 1 / Node A:** `172.29.80.10`
+- **PC 2 / Node B:** `172.29.80.11`
+- **PC 3 / NFS:** `172.29.80.5`
+- **Proxy-VIP:** `172.29.80.200`
+
+Damit kannst du die Dateien in diesem Ordner fast unverändert verwenden.
+
 ## Wichtige Abgrenzung
 
 Für dieses Testlab verwendest du **nicht**:
