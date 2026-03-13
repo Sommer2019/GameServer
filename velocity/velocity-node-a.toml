@@ -33,6 +33,10 @@ kick_existing_players = false
 
 # ── Servers ──────────────────────────────────────────────────────────────────
 [servers]
+# Lobby – always running, lightweight (512 M), players land here first and
+# fall back here automatically when all game-server backends are unavailable.
+lobby  = "127.0.0.1:25566"      # lobby IPv4 loopback
+lobby6 = "[::1]:25566"           # lobby IPv6 loopback
 # Co-located backend: try via IPv4 loopback first, IPv6 loopback as fallback.
 # Docker binds the Minecraft port to both 127.0.0.1 and ::1.
 main   = "127.0.0.1:25565"      # co-located backend IPv4 loopback (Node A)
@@ -41,13 +45,14 @@ main6  = "[::1]:25565"           # co-located backend IPv6 loopback (Node A)
 backup  = "192.168.1.11:25565"  # ← Node B IPv4 (set NODE_B_IP in .env)
 backup6 = "[fd00::11]:25565"    # ← Node B IPv6 (set NODE_B_IP6 in .env)
 
-# Connection attempt order: co-located first, then remote
-try = ["main", "main6", "backup", "backup6"]
+# Connection attempt order: game servers first, lobby as the final fallback
+try = ["main", "main6", "backup", "backup6", "lobby", "lobby6"]
 
 # ── Forced Hosts ──────────────────────────────────────────────────────────────
 [forced-hosts]
-# Players connecting via domain are routed through the try list above
-"play.yourdomain.de" = ["main", "main6", "backup", "backup6"]   # ← set your domain
+# Players connecting via domain land in the lobby first; a plugin or command
+# then sends them to the game server.
+"play.yourdomain.de" = ["lobby", "lobby6"]   # ← set your domain
 
 # ── Advanced ─────────────────────────────────────────────────────────────────
 connection_timeout = 5000

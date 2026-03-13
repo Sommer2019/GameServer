@@ -26,17 +26,24 @@ kick_existing_players = false
 
 # ── Servers ──────────────────────────────────────────────────────────────────
 [servers]
+# Lobby – always running, lightweight (512 M), players land here first and
+# fall back here automatically when all game-server backends are unavailable.
+lobby  = "127.0.0.1:25566"      # lobby IPv4 loopback
+lobby6 = "[::1]:25566"           # lobby IPv6 loopback
 main   = "127.0.0.1:25565"      # co-located backend IPv4 loopback (Node B)
 main6  = "[::1]:25565"           # co-located backend IPv6 loopback (Node B)
 # Remote backup backend on Node A (reachable over internal network)
 backup  = "192.168.1.10:25565"  # ← Node A IPv4 (set NODE_A_IP in .env)
 backup6 = "[fd00::10]:25565"    # ← Node A IPv6 (set NODE_A_IP6 in .env)
 
-try = ["main", "main6", "backup", "backup6"]
+# Connection attempt order: game servers first, lobby as the final fallback
+try = ["main", "main6", "backup", "backup6", "lobby", "lobby6"]
 
 # ── Forced Hosts ──────────────────────────────────────────────────────────────
 [forced-hosts]
-"play.yourdomain.de" = ["main", "main6", "backup", "backup6"]
+# Players connecting via domain land in the lobby first; a plugin or command
+# then sends them to the game server.
+"play.yourdomain.de" = ["lobby", "lobby6"]
 
 # ── Advanced ─────────────────────────────────────────────────────────────────
 connection_timeout = 5000
