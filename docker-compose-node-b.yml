@@ -1,0 +1,67 @@
+version: "3.9"
+
+# ============================================================
+# Node B – BACKUP (Passive / Hot-Standby) Minecraft GameServer
+# ============================================================
+# The container starts but Minecraft does NOT start immediately.
+# The watchdog script (scripts/watchdog.sh) polls the session.lock
+# on the shared NFS mount.  When Node A goes offline, the lock
+# disappears and the watchdog promotes Node B to active.
+#
+# Prerequisites:
+#   - Shared NFS volume is already mounted at /mnt/gamedata on this host
+#   - Keepalived is running on this node (in BACKUP state)
+#
+# Usage:
+#   docker compose -f docker-compose-node-b.yml up -d
+# ============================================================
+
+services:
+  minecraft-backup:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-backup
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "1.21.4"
+      MEMORY: "4G"
+      ONLINE_MODE: "FALSE"
+      ENFORCE_SECURE_PROFILE: "FALSE"
+      PAPER_VELOCITY_SECRET: "${VELOCITY_SECRET}"
+      JVM_XX_OPTS: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
+      # Signal to the entrypoint that this is the standby node
+      STANDBY_MODE: "true"
+    volumes:
+      # Same shared NFS mount as Node A – session.lock prevents dual-write
+      - /mnt/gamedata/worlds:/data/worlds
+      - minecraft-config-backup:/data
+      # Mount watchdog script into container
+      - ./scripts/watchdog.sh:/usr/local/bin/watchdog.sh:ro
+      - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
+    ports:
+      - "25565:25565"
+    # Override default entrypoint to run the watchdog-controlled startup
+    entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-backup.sh"]
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /tmp/minecraft-active ] && mc-health || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      role: "backup"
+      node: "node-b"
+
+volumes:
+  minecraft-config-backup:
+    driver: local
+
+networks:
+  gameserver-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

@@ -1,0 +1,60 @@
+version: "3.9"
+
+# ============================================================
+# Node A – PRIMARY (Active) Minecraft GameServer
+# ============================================================
+# Prerequisites:
+#   - Shared NFS volume is already mounted at /mnt/gamedata on this host
+#   - Keepalived is running and this node holds the VIP
+#
+# Usage:
+#   docker compose -f docker-compose-node-a.yml up -d
+# ============================================================
+
+services:
+  minecraft-primary:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-primary
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "1.21.4"
+      MEMORY: "4G"
+      # Allow only connections from the Velocity proxy (forwarding mode)
+      ONLINE_MODE: "FALSE"
+      ENFORCE_SECURE_PROFILE: "FALSE"
+      # Velocity modern forwarding secret – must match velocity.toml
+      PAPER_VELOCITY_SECRET: "${VELOCITY_SECRET}"
+      # Performance tuning
+      JVM_XX_OPTS: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
+    volumes:
+      # Shared NFS mount – world data lives here
+      - /mnt/gamedata/worlds:/data/worlds
+      # Server config & plugins persist locally (fast disk)
+      - minecraft-config:/data
+    ports:
+      # Expose ONLY to the Velocity proxy IP; iptables rules handle this externally
+      - "25565:25565"
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      role: "primary"
+      node: "node-a"
+
+volumes:
+  minecraft-config:
+    driver: local
+
+networks:
+  gameserver-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

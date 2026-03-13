@@ -1,0 +1,15 @@
+# =============================================================================
+# /etc/exports – NFS export configuration (example / reference)
+# =============================================================================
+# This file is managed by nfs/setup-nfs-server.sh.
+# It is provided here as a reference / version-controlled template.
+#
+# Copy to /etc/exports on the NFS server after adjusting the IPs.
+# After copying, run:   sudo exportfs -rav
+#
+# Format:
+#   <directory>  <client-ip>(<options>)  <client-ip>(<options>)
+# =============================================================================
+
+# Shared game-world data – accessible by Node A and Node B only
+/srv/gamedata  192.168.1.10(rw,sync,no_subtree_check,no_root_squash)  192.168.1.11(rw,sync,no_subtree_check,no_root_squash)

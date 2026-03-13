@@ -1,0 +1,47 @@
+version: "3.9"
+
+# =============================================================================
+# docker-compose-velocity.yml – Velocity Proxy
+# =============================================================================
+# Deploy this on a separate (ideally public-facing) machine, OR on one of the
+# game-server nodes if you don't have a third machine.
+#
+# Usage:
+#   docker compose -f docker-compose-velocity.yml up -d
+# =============================================================================
+
+services:
+  velocity:
+    build:
+      context: ./velocity
+      dockerfile: Dockerfile
+    image: gameserver-velocity:latest
+    container_name: velocity-proxy
+    restart: unless-stopped
+    ports:
+      # Public-facing Minecraft port – players connect here
+      - "25565:25577"
+    volumes:
+      # Mount velocity.toml so you can edit it without rebuilding the image
+      - ./velocity/velocity.toml:/opt/velocity/velocity.toml:ro
+      # Persistent Velocity data (forwarding.secret, logs, plugins)
+      - velocity-data:/opt/velocity
+    environment:
+      # JVM tuning via environment (optional override)
+      JVM_OPTS: "-Xms512M -Xmx1G"
+    networks:
+      - proxy-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 25577 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  velocity-data:
+    driver: local
+
+networks:
+  proxy-net:
+    driver: bridge
