@@ -387,6 +387,66 @@ assert_eq "Watchdog: lock removed mid-run → promotes" "PROMOTED_AFTER_FAILOVER
 
 rm -rf "${TMPDIR_TEST}"
 
+# ── 14. IPv4 lab: isolated test configs and docs ─────────────────────────────
+echo ""
+echo "-- 14. IPv4 lab (separate test folder) --"
+
+IPV4_LAB_DIR="${REPO_ROOT}/test/ipv4-lab"
+IPV4_NODE_A="${IPV4_LAB_DIR}/compose/node-a.yml"
+IPV4_NODE_B="${IPV4_LAB_DIR}/compose/node-b.yml"
+IPV4_KA_A="${IPV4_LAB_DIR}/keepalived/node-a.conf"
+IPV4_KA_B="${IPV4_LAB_DIR}/keepalived/node-b.conf"
+IPV4_VA="${IPV4_LAB_DIR}/velocity/velocity-node-a.toml"
+IPV4_VB="${IPV4_LAB_DIR}/velocity/velocity-node-b.toml"
+IPV4_V_DOCKERFILE="${IPV4_LAB_DIR}/velocity/Dockerfile"
+
+assert_file "IPv4 lab README exists"              "${IPV4_LAB_DIR}/README.md"
+assert_file "IPv4 lab env example exists"        "${IPV4_LAB_DIR}/.env.example"
+assert_file "IPv4 lab PC1 guide exists"          "${IPV4_LAB_DIR}/PC1-node-a.md"
+assert_file "IPv4 lab PC2 guide exists"          "${IPV4_LAB_DIR}/PC2-node-b.md"
+assert_file "IPv4 lab PC3 guide exists"          "${IPV4_LAB_DIR}/PC3-nfs.md"
+assert_file "IPv4 lab IPv6 migration guide exists" "${IPV4_LAB_DIR}/SPAETER-ipv6.md"
+assert_file "IPv4 lab compose node-a exists"     "${IPV4_NODE_A}"
+assert_file "IPv4 lab compose node-b exists"     "${IPV4_NODE_B}"
+assert_file "IPv4 lab keepalived node-a exists"  "${IPV4_KA_A}"
+assert_file "IPv4 lab keepalived node-b exists"  "${IPV4_KA_B}"
+assert_file "IPv4 lab velocity node-a exists"    "${IPV4_VA}"
+assert_file "IPv4 lab velocity node-b exists"    "${IPV4_VB}"
+assert_file "IPv4 lab velocity Dockerfile exists" "${IPV4_V_DOCKERFILE}"
+assert_file "IPv4 lab build-time velocity.toml exists" "${IPV4_LAB_DIR}/velocity/velocity.toml"
+
+# Compose is intentionally IPv4-only
+assert_contains "IPv4 lab Node A exposes IPv4 public port"  "${IPV4_NODE_A}" '0.0.0.0:25565:25577'
+assert_contains "IPv4 lab Node B exposes IPv4 public port"  "${IPV4_NODE_B}" '0.0.0.0:25565:25577'
+assert_not_contains "IPv4 lab Node A has no IPv6 bind"      "${IPV4_NODE_A}" '\[::\]'
+assert_not_contains "IPv4 lab Node B has no IPv6 bind"      "${IPV4_NODE_B}" '\[::\]'
+assert_not_contains "IPv4 lab Node A has no enable_ipv6"    "${IPV4_NODE_A}" 'enable_ipv6'
+assert_not_contains "IPv4 lab Node B has no enable_ipv6"    "${IPV4_NODE_B}" 'enable_ipv6'
+assert_not_contains "IPv4 lab Node A has no fd20 subnet"    "${IPV4_NODE_A}" 'fd20::/64'
+assert_not_contains "IPv4 lab Node B has no fd21 subnet"    "${IPV4_NODE_B}" 'fd21::/64'
+
+# Keepalived lab config is intentionally IPv4-only
+assert_contains "IPv4 lab Node A keepalived has PROXY_VIP"   "${IPV4_KA_A}" 'PROXY_VIP'
+assert_contains "IPv4 lab Node B keepalived has PROXY_VIP"   "${IPV4_KA_B}" 'PROXY_VIP'
+assert_not_contains "IPv4 lab Node A keepalived has no PROXY_VIP6" "${IPV4_KA_A}" 'PROXY_VIP6'
+assert_not_contains "IPv4 lab Node B keepalived has no PROXY_VIP6" "${IPV4_KA_B}" 'PROXY_VIP6'
+
+# Velocity lab configs are intentionally IPv4-only
+for VT in "${IPV4_VA}" "${IPV4_VB}"; do
+    label="$(basename "${VT}")"
+    assert_contains "${label} binds to 0.0.0.0"            "${VT}" '0.0.0.0:25577'
+    assert_contains "${label} has IPv4 lobby"              "${VT}" '127.0.0.1:25566'
+    assert_contains "${label} has IPv4 main"               "${VT}" '127.0.0.1:25565'
+    assert_not_contains "${label} has no lobby6"           "${VT}" '^lobby6 '
+    assert_not_contains "${label} has no main6"            "${VT}" '^main6 '
+    assert_not_contains "${label} has no backup6"          "${VT}" '^backup6 '
+    assert_not_contains "${label} has no IPv6 bind"        "${VT}" '\[::\]:25577'
+done
+
+# Lab Velocity image includes nc for the healthcheck and stays isolated
+assert_contains "IPv4 lab Velocity Dockerfile installs busybox-extras" "${IPV4_V_DOCKERFILE}" 'busybox-extras'
+assert_contains "IPv4 lab Velocity Dockerfile keeps healthcheck" "${IPV4_V_DOCKERFILE}" 'nc -z localhost 25577'
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "============================================"

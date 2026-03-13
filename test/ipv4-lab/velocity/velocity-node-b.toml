@@ -1,0 +1,37 @@
+# =============================================================================
+# IPv4 Lab – Velocity configuration for Node B
+# =============================================================================
+# Set forwarding_secret to the same value as VELOCITY_SECRET in test/ipv4-lab/.env
+# Replace play.test.local with your real lab DNS name.
+# =============================================================================
+
+bind = "0.0.0.0:25577"
+
+motd = "&6GameServer &7– &aIPv4-Testlab"
+show_max_players = 100
+online_mode = true
+player_info_forwarding_mode = "MODERN"
+forwarding_secret = "CHANGE_ME_32_CHAR_SECRET_HERE"
+kick_existing_players = false
+
+[servers]
+lobby  = "127.0.0.1:25566"
+main   = "127.0.0.1:25565"
+backup = "192.168.1.10:25565"
+try = ["main", "backup", "lobby"]
+
+[forced-hosts]
+"play.test.local" = ["lobby"]
+
+connection_timeout = 5000
+read_timeout       = 30000
+compression_threshold = 256
+compression_level     = -1
+login_ratelimit = 2000
+
+[query]
+enabled      = true
+port         = 25577
+map          = "Velocity"
+show_plugins = false
+

@@ -1,0 +1,108 @@
+version: "3.9"
+
+# ============================================================
+# IPv4 Lab – Node B (BACKUP)
+# ============================================================
+# Start with:
+#   docker compose -f test/ipv4-lab/compose/node-b.yml --env-file test/ipv4-lab/.env up -d
+# ============================================================
+
+services:
+  minecraft-lobby:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-lobby
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "${MC_VERSION:-1.21.4}"
+      MEMORY: "512M"
+      ONLINE_MODE: "FALSE"
+      ENFORCE_SECURE_PROFILE: "FALSE"
+      PAPER_VELOCITY_SECRET: "${VELOCITY_SECRET}"
+      GAMEMODE: "adventure"
+      FORCE_GAMEMODE: "TRUE"
+      JVM_XX_OPTS: "-XX:+UseG1GC"
+    volumes:
+      - lobby-config:/data
+    ports:
+      - "127.0.0.1:25566:25565"
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  minecraft-backup:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-backup
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "${MC_VERSION:-1.21.4}"
+      MEMORY: "${MC_MEMORY:-2G}"
+      ONLINE_MODE: "FALSE"
+      ENFORCE_SECURE_PROFILE: "FALSE"
+      PAPER_VELOCITY_SECRET: "${VELOCITY_SECRET}"
+      JVM_XX_OPTS: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
+      STANDBY_MODE: "true"
+    volumes:
+      - /mnt/gamedata/worlds:/data/worlds
+      - minecraft-config-backup:/data
+      - ../../../scripts/watchdog.sh:/usr/local/bin/watchdog.sh:ro
+      - ../../../scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
+    ports:
+      - "127.0.0.1:25565:25565"
+    entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-backup.sh"]
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /tmp/minecraft-active ] && mc-health || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  velocity-proxy-2:
+    build:
+      context: ../velocity
+      dockerfile: Dockerfile
+    image: gameserver-velocity-ipv4-lab:latest
+    container_name: velocity-proxy-2
+    restart: unless-stopped
+    depends_on:
+      - minecraft-lobby
+    ports:
+      - "0.0.0.0:25565:25577"
+    volumes:
+      - ../velocity/velocity-node-b.toml:/opt/velocity/velocity.toml:ro
+      - velocity-data-2:/opt/velocity
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 25577 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  lobby-config:
+    driver: local
+  minecraft-config-backup:
+    driver: local
+  velocity-data-2:
+    driver: local
+
+networks:
+  gameserver-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+          gateway: 172.31.0.1
+

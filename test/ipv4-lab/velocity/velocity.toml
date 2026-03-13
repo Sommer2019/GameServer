@@ -1,0 +1,14 @@
+# Placeholder config used only at image build time.
+# At runtime this file is replaced by a bind mount from:
+#   test/ipv4-lab/velocity/velocity-node-a.toml  or
+#   test/ipv4-lab/velocity/velocity-node-b.toml
+bind = "0.0.0.0:25577"
+motd = "temporary-build-config"
+show_max_players = 10
+online_mode = true
+player_info_forwarding_mode = "MODERN"
+forwarding_secret = "temporary-build-secret"
+[servers]
+lobby = "127.0.0.1:25566"
+try = ["lobby"]
+
