@@ -25,8 +25,8 @@ services:
       JVM_XX_OPTS: "-XX:+UseG1GC"
     volumes:
       - lobby-config:/data
-    ports:
-      - "127.0.0.1:25566:25565"
+    # Kein Host-Port nötig – Velocity erreicht den Lobby-Server
+    # intern über den Docker-Service-Namen "minecraft-lobby:25565"
     networks:
       - gameserver-net
     healthcheck:
@@ -56,7 +56,10 @@ services:
       - ../../../scripts/watchdog.sh:/usr/local/bin/watchdog.sh:ro
       - ../../../scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
     ports:
-      - "127.0.0.1:25565:25565"
+      # Port 25575 statt 25565 – vermeidet Konflikt mit Velocity (0.0.0.0:25565).
+      # Velocity auf Node B erreicht diesen Server intern als "minecraft-backup:25565".
+      # Node A's Velocity nutzt ihn als Backup über 172.29.80.11:25575.
+      - "0.0.0.0:25575:25565"
     entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-backup.sh"]
     networks:
       - gameserver-net

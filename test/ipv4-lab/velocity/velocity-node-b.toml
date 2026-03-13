@@ -15,9 +15,11 @@ forwarding_secret = "CHANGE_ME_32_CHAR_SECRET_HERE"
 kick_existing_players = false
 
 [servers]
-lobby  = "127.0.0.1:25566"
-main   = "127.0.0.1:25565"
-backup = "172.29.80.10:25565"
+# "minecraft-backup" und "minecraft-lobby" sind Docker-Service-Namen im selben gameserver-net.
+# Der Backup-Server läuft auf Node A und ist über Port 25575 erreichbar (kein Konflikt mit Velocity).
+lobby  = "minecraft-lobby:25565"
+main   = "minecraft-backup:25565"
+backup = "172.29.80.10:25575"
 try = ["main", "backup", "lobby"]
 
 [forced-hosts]

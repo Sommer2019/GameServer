@@ -435,13 +435,18 @@ assert_not_contains "IPv4 lab Node B keepalived has no PROXY_VIP6" "${IPV4_KA_B}
 for VT in "${IPV4_VA}" "${IPV4_VB}"; do
     label="$(basename "${VT}")"
     assert_contains "${label} binds to 0.0.0.0"            "${VT}" '0.0.0.0:25577'
-    assert_contains "${label} has IPv4 lobby"              "${VT}" '127.0.0.1:25566'
-    assert_contains "${label} has IPv4 main"               "${VT}" '127.0.0.1:25565'
+    assert_contains "${label} has Docker-network lobby"    "${VT}" 'minecraft-lobby:25565'
     assert_not_contains "${label} has no lobby6"           "${VT}" '^lobby6 '
     assert_not_contains "${label} has no main6"            "${VT}" '^main6 '
     assert_not_contains "${label} has no backup6"          "${VT}" '^backup6 '
     assert_not_contains "${label} has no IPv6 bind"        "${VT}" '\[::\]:25577'
 done
+# Node-A Velocity: lokaler primary, Backup auf Node B via Port 25575
+assert_contains "velocity-node-a has minecraft-primary"        "${IPV4_VA}" 'minecraft-primary:25565'
+assert_contains "velocity-node-a backup uses cross-node 25575" "${IPV4_VA}" '172.29.80.11:25575'
+# Node-B Velocity: lokaler backup, Backup auf Node A via Port 25575
+assert_contains "velocity-node-b has minecraft-backup"         "${IPV4_VB}" 'minecraft-backup:25565'
+assert_contains "velocity-node-b backup uses cross-node 25575" "${IPV4_VB}" '172.29.80.10:25575'
 
 # Lab Velocity image includes nc for the healthcheck and stays isolated
 assert_contains "IPv4 lab Velocity Dockerfile installs busybox-extras" "${IPV4_V_DOCKERFILE}" 'busybox-extras'
