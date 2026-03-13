@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  # ── Reverse proxy ────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - web
+
+  # ── React + Vite frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - web
+
+  # ── Java Spring Boot backend ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # Override this with a strong random secret in production!
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars-long}
+      # Expose the Docker socket so the backend can create Minecraft containers
+      # on the same Docker host (no extra VM required)
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      # Mount the Docker socket – containers are created on the host directly
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent H2 database
+      - gameserver-data:/data
+    restart: unless-stopped
+    networks:
+      - web
+    # Backend never exposed directly; only reachable via nginx
+    expose:
+      - "8080"
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  gameserver-data:
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  web:
+    driver: bridge

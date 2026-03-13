@@ -1,0 +1,57 @@
+.server-card {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 520px;
+  width: 100%;
+}
+
+.server-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.server-card-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.server-status {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.server-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.server-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.server-info-row .label {
+  color: #6b7280;
+}
+
+.server-info-row code {
+  background: #252525;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #4ade80;
+}
+
+.server-card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
