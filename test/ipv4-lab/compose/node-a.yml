@@ -79,7 +79,7 @@ services:
     ports:
       - "0.0.0.0:25565:25577"
     volumes:
-      - ../velocity/velocity-node-a.toml:/opt/velocity/velocity.toml:ro
+      - ../velocity/velocity-node-a.toml:/opt/velocity/velocity.toml:rw
       - velocity-data-1:/opt/velocity
     networks:
       - gameserver-net
