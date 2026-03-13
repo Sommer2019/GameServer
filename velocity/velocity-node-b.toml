@@ -1,0 +1,53 @@
+# =============================================================================
+# velocity-node-b.toml – Velocity Proxy Configuration for Node B
+# =============================================================================
+# Used by velocity-proxy-2 on Node B.
+# - main   = co-located backend on this machine (localhost)
+# - backup = Node A's Minecraft backend (used if main is unreachable)
+#
+# This is a mirror of velocity-node-a.toml with backup IPs swapped:
+#   Node A config: backup = Node B IPs
+#   Node B config: backup = Node A IPs  ← this file
+#
+# Dual-stack: Velocity binds to [::] which accepts both IPv4 and IPv6.
+# =============================================================================
+
+bind = "[::]:25577"
+
+motd = "&6GameServer &7– &aHochverfügbar &r| &bHA-Setup"
+show_max_players = 500
+
+online_mode = true
+player_info_forwarding_mode = "MODERN"
+
+forwarding_secret = "CHANGE_ME_SECRET_HERE"
+
+kick_existing_players = false
+
+# ── Servers ──────────────────────────────────────────────────────────────────
+[servers]
+main   = "127.0.0.1:25565"      # co-located backend IPv4 loopback (Node B)
+main6  = "[::1]:25565"           # co-located backend IPv6 loopback (Node B)
+# Remote backup backend on Node A (reachable over internal network)
+backup  = "192.168.1.10:25565"  # ← Node A IPv4 (set NODE_A_IP in .env)
+backup6 = "[fd00::10]:25565"    # ← Node A IPv6 (set NODE_A_IP6 in .env)
+
+try = ["main", "main6", "backup", "backup6"]
+
+# ── Forced Hosts ──────────────────────────────────────────────────────────────
+[forced-hosts]
+"play.yourdomain.de" = ["main", "main6", "backup", "backup6"]
+
+# ── Advanced ─────────────────────────────────────────────────────────────────
+connection_timeout = 5000
+read_timeout       = 30000
+compression_threshold  = 256
+compression_level      = -1
+login_ratelimit = 2000
+
+# ── Query ────────────────────────────────────────────────────────────────────
+[query]
+enabled     = true
+port        = 25577
+map         = "Velocity"
+show_plugins = false

@@ -1,0 +1,64 @@
+# =============================================================================
+# velocity-node-a.toml – Velocity Proxy Configuration for Node A
+# =============================================================================
+# Used by velocity-proxy-1 on Node A.
+# - main   = co-located backend on this machine (localhost)
+# - backup = Node B's Minecraft backend (used if main is unreachable)
+#
+# Dual-stack: Velocity binds to [::] which on Linux accepts both IPv4
+# (via ::ffff: mapped addresses) and native IPv6 in a single socket.
+# Requires: net.ipv6.conf.all.disable_ipv6=0  (Linux default)
+#           java.net.preferIPv4Stack is NOT set (Velocity default)
+#
+# Documentation: https://docs.papermc.io/velocity/configuration
+# =============================================================================
+
+# Bind to all interfaces, both IPv4 and IPv6 (dual-stack socket on Linux)
+bind = "[::]:25577"
+
+motd = "&6GameServer &7– &aHochverfügbar &r| &bHA-Setup"
+show_max_players = 500
+
+# Velocity handles authentication; backends run in offline mode
+online_mode = true
+
+# Use MODERN forwarding with Paper backends
+player_info_forwarding_mode = "MODERN"
+
+# Forwarding secret – must match PAPER_VELOCITY_SECRET in docker-compose files
+# Generate with: openssl rand -hex 16
+forwarding_secret = "CHANGE_ME_SECRET_HERE"
+
+kick_existing_players = false
+
+# ── Servers ──────────────────────────────────────────────────────────────────
+[servers]
+# Co-located backend: try via IPv4 loopback first, IPv6 loopback as fallback.
+# Docker binds the Minecraft port to both 127.0.0.1 and ::1.
+main   = "127.0.0.1:25565"      # co-located backend IPv4 loopback (Node A)
+main6  = "[::1]:25565"           # co-located backend IPv6 loopback (Node A)
+# Remote backup backend on Node B (reachable over internal network)
+backup  = "192.168.1.11:25565"  # ← Node B IPv4 (set NODE_B_IP in .env)
+backup6 = "[fd00::11]:25565"    # ← Node B IPv6 (set NODE_B_IP6 in .env)
+
+# Connection attempt order: co-located first, then remote
+try = ["main", "main6", "backup", "backup6"]
+
+# ── Forced Hosts ──────────────────────────────────────────────────────────────
+[forced-hosts]
+# Players connecting via domain are routed through the try list above
+"play.yourdomain.de" = ["main", "main6", "backup", "backup6"]   # ← set your domain
+
+# ── Advanced ─────────────────────────────────────────────────────────────────
+connection_timeout = 5000
+read_timeout       = 30000
+compression_threshold  = 256
+compression_level      = -1
+login_ratelimit = 2000
+
+# ── Query ────────────────────────────────────────────────────────────────────
+[query]
+enabled     = true
+port        = 25577
+map         = "Velocity"
+show_plugins = false

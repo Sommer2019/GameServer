@@ -1,0 +1,21 @@
+# =============================================================================
+# /etc/exports – NFS export configuration (example / reference)
+# =============================================================================
+# This file belongs on the DEDICATED NFS SERVER (PC 3 – separate machine).
+# It is version-controlled here as a reference template.
+#
+# Copy to /etc/exports on the NFS server after adjusting the IPs, then run:
+#   sudo exportfs -rav
+#
+# Machines (dual-stack IPv4 + IPv6):
+#   PC 1 (Node A)  – Minecraft Primary + Velocity Proxy 1  – 192.168.1.10 / fd00::10
+#   PC 2 (Node B)  – Minecraft Backup  + Velocity Proxy 2  – 192.168.1.11 / fd00::11
+#   PC 3 (NFS)     – Dedicated storage server              – 192.168.1.5  / fd00::5
+#
+# Format:
+#   <directory>  <client>(<options>)  ...
+# IPv6 clients are enclosed in brackets: [fd00::10]
+# =============================================================================
+
+# Shared game-world data – accessible by Node A and Node B only (IPv4 + IPv6)
+/srv/gamedata  192.168.1.10(rw,sync,no_subtree_check,no_root_squash)  192.168.1.11(rw,sync,no_subtree_check,no_root_squash)  [fd00::10](rw,sync,no_subtree_check,no_root_squash)  [fd00::11](rw,sync,no_subtree_check,no_root_squash)

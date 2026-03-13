@@ -1,0 +1,109 @@
+version: "3.9"
+
+# ============================================================
+# Node A – PRIMARY (Active) Minecraft GameServer + Velocity Proxy 1
+# ============================================================
+# This node runs TWO services:
+#   1. minecraft-primary  – the active Minecraft backend
+#   2. velocity-proxy-1   – the public-facing Velocity proxy
+#
+# Keepalived on this host holds the public Proxy VIP (IPv4 + IPv6) when healthy.
+# Players connect to the Proxy VIP over IPv4 or IPv6.
+#
+# Prerequisites:
+#   - Docker daemon has IPv6 enabled (run scripts/setup-docker-ipv6.sh first)
+#   - Shared NFS volume is already mounted at /mnt/gamedata on this host
+#   - Keepalived is running (see keepalived/node-a/keepalived.conf)
+#
+# Usage:
+#   docker compose -f docker-compose-node-a.yml up -d
+# ============================================================
+
+services:
+
+  # ── 1. Minecraft Backend (primary / active) ──────────────────────────────
+  minecraft-primary:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft-primary
+    restart: unless-stopped
+    environment:
+      EULA: "TRUE"
+      TYPE: "PAPER"
+      VERSION: "1.21.4"
+      MEMORY: "4G"
+      # Offline mode – auth is handled by Velocity
+      ONLINE_MODE: "FALSE"
+      ENFORCE_SECURE_PROFILE: "FALSE"
+      # Velocity modern forwarding secret – must match velocity-node-a.toml
+      PAPER_VELOCITY_SECRET: "${VELOCITY_SECRET}"
+      # Performance tuning
+      JVM_XX_OPTS: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200"
+    volumes:
+      # Shared NFS mount – world data lives here (read/write)
+      - /mnt/gamedata/worlds:/data/worlds
+      # Server config & plugins persist on the local fast disk
+      - minecraft-config:/data
+    ports:
+      # Bind only to loopback (IPv4 + IPv6) so only the co-located proxy reaches it.
+      # iptables/ip6tables rules (scripts/security-iptables.sh) enforce this externally.
+      - "127.0.0.1:25565:25565"
+      - "[::1]:25565:25565"
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      role: "primary"
+      node: "node-a"
+
+  # ── 2. Velocity Proxy (instance 1 – lives on Node A) ─────────────────────
+  velocity-proxy-1:
+    build:
+      context: ./velocity
+      dockerfile: Dockerfile
+    image: gameserver-velocity:latest
+    container_name: velocity-proxy-1
+    restart: unless-stopped
+    depends_on:
+      - minecraft-primary
+    ports:
+      # Public-facing port – Keepalived Proxy VIP (IPv4 + IPv6) points here.
+      # Binding to [::] on Linux accepts both IPv4 (via ::ffff:) and IPv6.
+      - "0.0.0.0:25565:25577"
+      - "[::]:25565:25577"
+    volumes:
+      # Use Node A's specific config (backup = Node B's IP)
+      - ./velocity/velocity-node-a.toml:/opt/velocity/velocity.toml:ro
+      - velocity-data-1:/opt/velocity
+    networks:
+      - gameserver-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 25577 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      role: "proxy"
+      node: "node-a"
+
+volumes:
+  minecraft-config:
+    driver: local
+  velocity-data-1:
+    driver: local
+
+networks:
+  gameserver-net:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24    # IPv4
+          gateway: 172.20.0.1
+        - subnet: fd20::/64         # IPv6 ULA – Node A
+          gateway: fd20::1
